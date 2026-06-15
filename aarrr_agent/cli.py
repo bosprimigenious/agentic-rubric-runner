@@ -15,9 +15,11 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from aarrr_agent.config import PROJECT_ROOT
+from aarrr_agent.env import load_project_env
 from aarrr_agent.errors import PipelineError
 from aarrr_agent.grader import run_phase2_grader
-from aarrr_agent.pipeline import resolve_output_paths, run_pipeline
+from aarrr_agent.pipeline import make_run_id, resolve_output_paths, run_pipeline
 from aarrr_agent.reporting import print_score_summary
 from aarrr_agent.schemas import GradingResult
 from aarrr_agent.tools import save_trace
@@ -28,7 +30,18 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
-console = Console()
+def _configure_stdio_utf8() -> None:
+    if sys.platform == "win32":
+        for stream in (sys.stdout, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                try:
+                    stream.reconfigure(encoding="utf-8")
+                except Exception:
+                    pass
+
+
+_configure_stdio_utf8()
+console = Console(legacy_windows=False)
 
 
 def make_client() -> OpenAI:
@@ -55,7 +68,9 @@ def run(
     skip_phase2: bool = typer.Option(False, "--skip-phase2", help="仅运行 Phase 1"),
 ) -> None:
     """完整双阶段流水线：Agent 生成报告 + Rubric 自动评分。"""
-    paths = resolve_output_paths(out)
+    rid = make_run_id()
+    base_out = out if out is not None else Path("outputs") / rid
+    paths = resolve_output_paths(base_out, run_id=rid)
     if phase1_out:
         paths.phase1_pdf = phase1_out
         paths.phase1_md = phase1_out.with_suffix(".md")
@@ -208,11 +223,20 @@ def init(
     if env_example.exists() and not (target / ".env.example").exists():
         pass
 
+    fixture_pdf = PROJECT_ROOT / "fixtures" / "attachment.pdf"
+    attachment = target / "attachment.pdf"
+    if fixture_pdf.exists() and not attachment.exists():
+        attachment.write_bytes(fixture_pdf.read_bytes())
+
     console.print(f"[green]✓[/green] 已创建 {target}/")
     console.print("  - query.txt")
     console.print("  - rubrics.json（模板）")
+    if attachment.exists():
+        console.print("  - attachment.pdf（来自 fixtures 示例）")
+    else:
+        console.print("  - attachment.pdf（请自行放入）")
     console.print("  - outputs/")
-    console.print("请将 attachment.pdf 放入该目录后运行 agentic-rubric run ...")
+    console.print(f"运行: agentic-rubric run --query {target}/query.txt --pdf {target}/attachment.pdf --rubrics {target}/rubrics.json")
 
 
 @app.command()
@@ -227,6 +251,7 @@ def ui() -> None:
 
 
 def main() -> None:
+    load_project_env()
     app()
 
 
