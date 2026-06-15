@@ -95,6 +95,26 @@ def detect_forced_analogy_report(report_text: str, attachment_text: str) -> bool
     return bool(_FORCED_ANALOGY.search(report_text))
 
 
+def h15_failed(result: GradingResult) -> bool:
+    """H15（关键事实可追溯）是否未通过。"""
+    h15 = next((c for c in result.hard_constraints if c.id == "H15"), None)
+    return h15 is not None and h15.score == 0
+
+
+def should_enforce_attachment_gate(
+    result: GradingResult,
+    assessment: dict[str, Any],
+    *,
+    forced_analogy: bool,
+) -> bool:
+    """是否应触发程序门控（离题附件、强行类比、或 H15 未通过）。"""
+    if forced_analogy:
+        return True
+    if not assessment["relevant"]:
+        return True
+    return h15_failed(result)
+
+
 def enforce_attachment_gate(
     result: GradingResult,
     rubrics: dict[str, Any],
@@ -108,18 +128,24 @@ def enforce_attachment_gate(
     """
     assessment = assess_attachment_domain(attachment_text, query_text)
     forced_analogy = detect_forced_analogy_report(report_text, attachment_text)
-    if assessment["relevant"] and not forced_analogy:
+    if not should_enforce_attachment_gate(result, assessment, forced_analogy=forced_analogy):
         return result, assessment
 
     rubric = rubrics["rubric"]
-    gate_reason = (
-        f"程序门控：附件与社交电商/AARRR 增长领域不匹配"
-        f"（附件领域词 {assessment['domain_hit_count']} 个，"
-        f"离题信号 {assessment['off_domain_hit_count']} 个："
-        f"{', '.join(assessment['off_domain_hits'][:6]) or '无'}）。"
-    )
-    if forced_analogy:
-        gate_reason += " 报告将离题附件（如 DNS 实验）强行类比为增长指标，事实不可追溯。"
+    if not assessment["relevant"] or forced_analogy:
+        gate_reason = (
+            f"程序门控：附件与社交电商/AARRR 增长领域不匹配"
+            f"（附件领域词 {assessment['domain_hit_count']} 个，"
+            f"离题信号 {assessment['off_domain_hit_count']} 个："
+            f"{', '.join(assessment['off_domain_hits'][:6]) or '无'}）。"
+        )
+        if forced_analogy:
+            gate_reason += " 报告将离题附件（如 DNS 实验）强行类比为增长指标，事实不可追溯。"
+    else:
+        gate_reason = (
+            "程序门控：H15 未通过（关键事实无法追溯到附件），"
+            "硬约束 H02-H15 与全部软/可选项归零。"
+        )
 
     for i, item in enumerate(rubric["hard_constraints"], 1):
         cid = f"H{i:02d}"

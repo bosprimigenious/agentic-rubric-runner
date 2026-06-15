@@ -237,9 +237,12 @@ def write_structured_report(report_data: dict[str, Any], pdf_path: str, ctx: Pha
 
         attachment_body = ctx._pdf_text_cache or ""
         if attachment_body and not assess_attachment_domain(attachment_body)["relevant"]:
-            print(
-                f"[E007 警告] 附件领域不匹配，结构化报告可能无法通过 Rubric："
-                f"{assess_attachment_domain(attachment_body)['off_domain_hits'][:5]}"
+            assessment = assess_attachment_domain(attachment_body)
+            raise PipelineError(
+                "E007",
+                "附件与社交电商/AARRR 增长领域不匹配，拒绝写入结构化报告。"
+                f"离题信号：{', '.join(assessment['off_domain_hits'][:6]) or '无'}。"
+                "请上传与任务一致的源文档 PDF。",
             )
 
     report = StructuredReport.model_validate(report_data)
@@ -290,15 +293,17 @@ def write_pdf_report(content: str, pdf_path: str, ctx: Phase1ToolContext | None 
         if attachment_body:
             assessment = assess_attachment_domain(attachment_body)
             if not assessment["relevant"]:
+                detail = ", ".join(assessment["off_domain_hits"][:6]) or "领域词不足"
                 if detect_forced_analogy_report(content, attachment_body):
                     raise PipelineError(
                         "E007",
                         "报告将离题附件强行类比为增长指标（如 DNS→AARRR），拒绝写入。"
-                        "请使用与任务领域一致的附件。",
+                        f"离题信号：{detail}。请使用与任务领域一致的附件。",
                     )
-                print(
-                    f"[E007 警告] 附件领域不匹配，报告可能无法通过 Rubric 硬约束："
-                    f"{assessment['off_domain_hits'][:5]}"
+                raise PipelineError(
+                    "E007",
+                    "附件与社交电商/AARRR 增长领域不匹配，拒绝写入报告。"
+                    f"离题信号：{detail}。请上传正确的源文档 PDF。",
                 )
     else:
         pdf = Path(pdf_path).resolve()

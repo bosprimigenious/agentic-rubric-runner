@@ -73,9 +73,20 @@ def _clear_session(st) -> None:
     st.session_state[_SESSION_KEY] = None
 
 
+def _app_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("agentic-rubric-runner")
+    except Exception:
+        return "0.4.1"
+
+
 def _render_header(st) -> None:
     st.title("文档评审控制台")
-    st.caption("上传任务材料，运行受控评审流水线，导出可审计结果。")
+    st.caption(
+        f"上传任务材料，运行受控评审流水线，导出可审计结果。（管线 v{_app_version()}）"
+    )
 
 
 def _parse_trace_bytes(trace_bytes: bytes) -> list[dict[str, Any]]:
