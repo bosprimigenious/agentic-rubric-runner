@@ -48,3 +48,47 @@ def test_structured_to_executive_report():
     executive = structured_to_executive_report(report, run_id="20260615_120000")
     assert executive.north_star == "有效交易用户数"
     assert len(executive.aarrr_stages) == 5
+
+
+def test_coerce_llm_variant_shapes():
+    """兼容 LLM 常输出的非标准 JSON 形状。"""
+    raw = {
+        "title": "社交电商增长指标体系方案报告",
+        "executive_summary": "本报告旨在为社交电商平台梳理核心指标体系。",
+        "north_star_metric": {"name": "GMV", "reason": "综合反映交易规模"},
+        "aarrr_stages": [
+            {"stage": "获客", "health_metric": "新增注册", "diagnostic_metrics": ["CAC"]},
+        ],
+        "warning_rules": {
+            "red_alerts": [
+                {
+                    "metric": "首单转化率",
+                    "condition": "连续3天低于20%",
+                    "action": "启动应急复盘",
+                }
+            ],
+            "yellow_alerts": [
+                {
+                    "metric": "7日留存",
+                    "condition": "低于35%",
+                    "action": "加强监控频率",
+                }
+            ],
+        },
+        "review_cadence": {"weekly": "周复盘", "monthly": "月复盘", "quarterly": "季复盘"},
+        "action_plan": [
+            {"priority": "高", "action": "搭建看板", "timeline": "立即"},
+            {"priority": "中", "action": "优化激活路径", "timeline": "2周内"},
+        ],
+        "evidence_refs": ["E01"],
+    }
+    report = StructuredReport.model_validate(raw)
+    assert isinstance(report.executive_summary, dict)
+    assert report.executive_summary.get("overview", "").startswith("本报告")
+    assert len(report.warning_rules) >= 1
+    assert all(isinstance(item, str) for item in report.action_plan)
+    assert "搭建看板" in report.action_plan[0]
+
+    md = structured_to_markdown(report)
+    assert "管理层摘要" in md
+    assert "预警规则" in md

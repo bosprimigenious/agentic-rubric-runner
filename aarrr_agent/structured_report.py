@@ -2,11 +2,169 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from aarrr_agent.report_models import AARRRStage, ExecutiveReport, MetricCard, WarningRow
+
+
+def _format_action_item(item: Any) -> str:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        parts: list[str] = []
+        for key in ("priority", "action", "timeline", "description", "title", "owner"):
+            val = item.get(key)
+            if val:
+                parts.append(str(val))
+        if parts:
+            return " · ".join(parts)
+        return json.dumps(item, ensure_ascii=False)
+    return str(item)
+
+
+def _format_alert_item(item: Any) -> str:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        parts: list[str] = []
+        for key in ("condition", "threshold", "action", "description", "response", "trigger"):
+            val = item.get(key)
+            if val:
+                parts.append(str(val))
+        if parts:
+            return "；".join(parts)
+        return json.dumps(item, ensure_ascii=False)
+    return str(item)
+
+
+def _coerce_warning_rules(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        rows: list[dict[str, Any]] = []
+        for row in value:
+            if isinstance(row, dict):
+                rows.append(
+                    {
+                        "metric": str(
+                            row.get("metric") or row.get("indicator") or row.get("name") or ""
+                        ),
+                        "green": str(row.get("green") or row.get("normal") or ""),
+                        "yellow": str(row.get("yellow") or ""),
+                        "red": str(row.get("red") or ""),
+                    }
+                )
+            else:
+                rows.append({"metric": str(row), "green": "", "yellow": "", "red": ""})
+        return rows
+
+    if not isinstance(value, dict):
+        return []
+
+    if any(k in value for k in ("metric", "green", "yellow", "red", "normal")):
+        return _coerce_warning_rules([value])
+
+    merged: dict[str, dict[str, str]] = {}
+    for level, col in (
+        ("yellow_alerts", "yellow"),
+        ("red_alerts", "red"),
+        ("green_alerts", "green"),
+        ("alerts", "yellow"),
+    ):
+        alerts = value.get(level)
+        if not isinstance(alerts, list):
+            continue
+        for idx, item in enumerate(alerts):
+            if isinstance(item, dict):
+                metric = str(
+                    item.get("metric")
+                    or item.get("indicator")
+                    or item.get("name")
+                    or f"指标{idx + 1}"
+                )
+            else:
+                metric = f"指标{idx + 1}"
+            merged.setdefault(metric, {"metric": metric, "green": "", "yellow": "", "red": ""})
+            merged[metric][col] = _format_alert_item(item)
+
+    if merged:
+        return list(merged.values())
+
+    return [
+        {"metric": str(key), "yellow": _format_alert_item(val)}
+        for key, val in value.items()
+        if not isinstance(val, (list, dict)) or key.endswith("_alerts")
+    ]
+
+
+def _coerce_aarrr_stages(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [item if isinstance(item, dict) else {"stage": str(item)} for item in value]
+    if isinstance(value, dict):
+        stages: list[dict[str, Any]] = []
+        for key, item in value.items():
+            if isinstance(item, dict):
+                row = dict(item)
+                row.setdefault("stage", key)
+                stages.append(row)
+            else:
+                stages.append({"stage": str(key), "health_metric": str(item)})
+        return stages
+    return []
+
+
+def coerce_structured_report_data(data: Any) -> dict[str, Any]:
+    """将 LLM 常见 JSON 变体归一化为 StructuredReport 可接受形状。"""
+    if not isinstance(data, dict):
+        return {"title": str(data or "增长指标体系报告")}
+
+    out = dict(data)
+
+    if isinstance(out.get("executive_summary"), str):
+        out["executive_summary"] = {"overview": out["executive_summary"]}
+    elif out.get("executive_summary") is None:
+        out["executive_summary"] = {}
+
+    ns = out.get("north_star_metric")
+    if isinstance(ns, str):
+        out["north_star_metric"] = {"name": ns}
+    elif ns is None:
+        out["north_star_metric"] = {}
+
+    out["aarrr_stages"] = _coerce_aarrr_stages(out.get("aarrr_stages"))
+    out["warning_rules"] = _coerce_warning_rules(out.get("warning_rules"))
+
+    action_plan = out.get("action_plan")
+    if isinstance(action_plan, list):
+        out["action_plan"] = [_format_action_item(item) for item in action_plan]
+    elif isinstance(action_plan, dict):
+        out["action_plan"] = [_format_action_item(action_plan)]
+    elif action_plan is None:
+        out["action_plan"] = []
+    else:
+        out["action_plan"] = [_format_action_item(action_plan)]
+
+    refs = out.get("evidence_refs")
+    if isinstance(refs, str):
+        out["evidence_refs"] = [refs]
+    elif refs is None:
+        out["evidence_refs"] = []
+
+    appendix = out.get("appendix_sections")
+    if appendix is None:
+        out["appendix_sections"] = []
+    elif isinstance(appendix, dict):
+        out["appendix_sections"] = [appendix]
+
+    cadence = out.get("review_cadence")
+    if isinstance(cadence, str):
+        out["review_cadence"] = {"overview": cadence}
+    elif cadence is None:
+        out["review_cadence"] = {}
+
+    out.setdefault("title", "增长指标体系报告")
+    return out
 
 
 class StructuredReport(BaseModel):
@@ -20,6 +178,11 @@ class StructuredReport(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     appendix_sections: list[dict[str, Any]] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_llm_payload(cls, data: Any) -> Any:
+        return coerce_structured_report_data(data)
+
 
 def structured_to_markdown(report: StructuredReport) -> str:
     """将结构化报告转为 Markdown（含证据引用）。"""
@@ -28,6 +191,10 @@ def structured_to_markdown(report: StructuredReport) -> str:
     es = report.executive_summary
     if es:
         lines.extend(["## 管理层摘要", ""])
+        overview = es.get("overview") or es.get("summary")
+        if overview:
+            lines.append(str(overview))
+            lines.append("")
         for key in ("north_star", "key_risks", "priority_actions"):
             val = es.get(key)
             if isinstance(val, list):
