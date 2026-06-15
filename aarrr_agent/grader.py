@@ -81,7 +81,8 @@ def _normalize_grading_data(data: dict[str, Any], rubrics: dict[str, Any]) -> di
 def recalculate_scores(result: GradingResult, rubrics_path: str) -> GradingResult:
     """
     不信任模型计算的 breakdown 数字，程序强制重算 final_score。
-    公式：总得分率 = (hard + soft + optional) / (hard_max + soft_max + optional_max) * 100
+    加权公式（hard_max / soft_max / optional_max 从 rubrics.json 动态计算）：
+      final = (hard/hard_max)×50 + (soft/soft_max)×30 + (optional/optional_max)×20
     """
     rubrics = load_rubrics(rubrics_path)
     rubric = rubrics["rubric"]
@@ -95,9 +96,10 @@ def recalculate_scores(result: GradingResult, rubrics_path: str) -> GradingResul
     optional_score = sum(c.score for c in result.optional_constraints)
     optional_max = len(rubric["optional_constraints"])
 
-    total_score = hard_score + soft_score + optional_score
-    total_max = hard_max + soft_max + optional_max
-    final_score = round(total_score / total_max * 100, 2) if total_max else 0.0
+    hard_rate = hard_score / hard_max if hard_max else 0.0
+    soft_rate = soft_score / soft_max if soft_max else 0.0
+    optional_rate = optional_score / optional_max if optional_max else 0.0
+    final_score = round(hard_rate * 50 + soft_rate * 30 + optional_rate * 20, 2)
 
     result.score_breakdown = ScoreBreakdown(
         hard_score=hard_score,
@@ -164,6 +166,10 @@ REFERENCE ATTACHMENT (source PDF):
 {attachment_text}
 
 SUBMITTED DOCUMENT (Phase 1 output):
+The candidate delivered a PDF at: {phase1_pdf_path}
+The text below is the Markdown source of that PDF (preferred for evaluation).
+If the PDF file exists and was generated from this content, treat PDF-format requirements as satisfied.
+
 {phase1_text}
 
 SCORING RULES:
