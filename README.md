@@ -246,43 +246,64 @@ agentic-rubric run ... --model deepseek-chat
 
 本地启动：`agentic-rubric ui` 或 `streamlit run app.py`
 
-### Streamlit Cloud 部署（维护参考）
+### Streamlit Cloud 部署与排错
 
-当前已部署于上述地址。若需重新部署或 fork 后自建，可按以下步骤操作：
+**当前在线地址：** https://agentic-rubric-runner-ajswk9uybbsa6cfasiudrx.streamlit.app/
 
-> 依赖文件为根目录 `requirements.txt`（非 `requirements-web.txt`）。公开 Demo 建议在页面输入 API Key，Secrets 可留空。
+应用已创建后，若页面**空白 / 只有灰色背景 / 看不见内容**，按下面顺序排查（多数情况是云端配置未更新，而非代码未部署）：
 
-1. 登录 [share.streamlit.io](https://share.streamlit.io/)（GitHub 账号，需有仓库权限）
-2. **Create app**，填写：
+#### 第一步：核对 Streamlit Cloud 应用设置
 
-| 字段 | 值 |
-|------|-----|
-| Repository | `bosprimigenious/agentic-rubric-runner` |
-| Branch | `main` |
+在 [share.streamlit.io](https://share.streamlit.io/) 打开你的应用 → 右下角 **Manage app** → **Settings**：
+
+| 设置项 | 正确值 |
+|--------|--------|
 | Main file path | `app.py` |
+| Requirements file | `requirements.txt` 或 `requirements-web.txt`（二者等价） |
+| Python version | **3.11**（不要用 3.9 / 3.10） |
+| Visibility | **Public** |
 
-3. **Advanced settings → Secrets**：留空（公开 Demo，用户页面输入 Key）
-4. 点击 **Deploy**，等待构建（约 2–5 分钟）
-5. 将应用 Visibility 设为 **Public**，复制分配的真实 URL
+改完后点击 **Save**，再点 **Clear cache and redeploy**（或 **Reboot app**），等待 2–5 分钟，浏览器 **Ctrl+Shift+R** 硬刷新。
+
+#### 第二步：看构建日志
+
+**Manage app** → **Logs**，确认末尾有 `Processed dependencies!` 且无红色报错。常见错误：
+
+| 日志关键词 | 处理 |
+|------------|------|
+| `ModuleNotFoundError: aarrr_agent` | Requirements file 填错或 `main` 未拉到最新代码 → 改为 `requirements.txt` 并 redeploy |
+| `No such file: requirements-web.txt` | 拉取最新 `main`（已提供该文件）或改用 `requirements.txt` |
+| `pip install` 失败 | 检查 Python 版本是否为 3.11 |
+
+#### 第三步：区分浏览器警告与真实故障
+
+控制台里 `Unrecognized feature: 'battery'` / `'vr'` 等是 Chrome 对 Streamlit iframe 的**无害警告**，可忽略。
+
+若出现 `Unable to preload CSS` 或整页只有灰色背景：在 Streamlit 控制台 **Reboot app**；仍不行则 **Delete app → 用同样配置重新 Create app**。
+
+#### 首次部署步骤（新建应用时）
+
+1. 登录 [share.streamlit.io](https://share.streamlit.io/)（GitHub 账号）
+2. **Create app** → Repository: `bosprimigenious/agentic-rubric-runner`，Branch: `main`，Main file: `app.py`
+3. Advanced → Requirements file: `requirements.txt`；Secrets **留空**（用户在页面输入 API Key）
+4. **Deploy** → Visibility 设为 **Public**
 
 **云端构建依赖**
 
 | 文件 | 作用 |
 |------|------|
-| `requirements.txt` | Python 依赖 |
+| `requirements.txt` | Python 依赖（显式列表） |
+| `requirements-web.txt` | 指向 `requirements.txt`（兼容旧配置） |
 | `packages.txt` | 系统包 `fonts-noto-cjk`（PDF 中文渲染） |
-| `app.py` | Streamlit 入口（注入 `sys.path` 后加载 `aarrr_agent`） |
-| `.streamlit/config.toml` | 主题与页面配置 |
+| `app.py` | Streamlit 入口 |
+| `.streamlit/config.toml` | 主题配置 |
 
-**常见构建问题**
+**运行时错误码（应用内）**
 
-| 现象 | 处理 |
+| 代码 | 含义 |
 |------|------|
-| 页面空白、只有灰色背景 | 确认 Requirements file 为 `requirements.txt`（**不是** `requirements-web.txt`）；Python 版本选 **3.11**；在控制台 **Reboot app** 或 **Clear cache and redeploy** |
-| 控制台 `Unrecognized feature: 'battery'` 等 | 浏览器对 Streamlit iframe 权限的**无害警告**，可忽略 |
-| `ModuleNotFoundError: aarrr_agent` | 确认 `requirements.txt` 含 `.[web]`，且 `main` 分支已 push |
-| 中文字体 E006 | 确认根目录 `packages.txt` 含 `fonts-noto-cjk` |
-| 需要登录才能访问 | 应用设置中改为 **Public** |
+| E006 | 中文字体缺失 → 确认 `packages.txt` 含 `fonts-noto-cjk` |
+| E001 | 未输入 API Key 或 API 调用失败 |
 
 ---
 

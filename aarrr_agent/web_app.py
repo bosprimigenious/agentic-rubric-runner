@@ -6,6 +6,14 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# 支持 streamlit run aarrr_agent/web_app.py（Cloud 或本地）
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 import json
 import tempfile
 import time
@@ -31,9 +39,8 @@ st.set_page_config(
 
 _CONSOLE_CSS = """
 <style>
-  /* 勿隐藏 stHeader / MainMenu：在 Streamlit Cloud 新版本中会导致整页空白 */
-  footer { visibility: hidden; }
-  .block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1180px; }
+  footer {visibility: hidden;}
+  .block-container {padding-top: 1.25rem; padding-bottom: 2rem; max-width: 1180px;}
   .console-header { margin-bottom: 0.25rem; }
   .console-title {
     font-size: 1.65rem; font-weight: 650; letter-spacing: -0.02em;
