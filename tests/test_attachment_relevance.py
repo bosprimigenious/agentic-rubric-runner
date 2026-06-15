@@ -61,7 +61,8 @@ def test_format_e007_user_message():
         {"off_domain_hits": ["机器人", "实践训练"]},
         filename="智能机器人实践训练指导书.pdf",
     )
-    assert "不是系统故障" in msg
+    assert "不是系统故障" not in msg
+    assert "压低得分" in msg
     assert "智能机器人" in msg
     assert "机器人" in msg
 

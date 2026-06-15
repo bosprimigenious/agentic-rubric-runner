@@ -111,8 +111,7 @@ def format_e007_user_message(
     if off:
         parts.append(f"离题信号：{off}")
     parts.append(
-        "这是刻意的领域校验，不是系统故障。"
-        "请上传与任务描述一致的增长策略 PDF（如《基于AARRR模型的社交电商平台用户增长策略研究》）后重新运行。"
+        "可继续运行完整评审；Phase 2 会对离题附件自动压低得分。"
     )
     return " ".join(parts)
 

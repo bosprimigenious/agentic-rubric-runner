@@ -72,9 +72,7 @@ def test_mock_agent_self_check_and_structured_report(ctx):
     assert all("phase1_state" in e for e in trace)
 
 
-def test_write_rejected_for_off_domain_attachment(ctx):
-    from aarrr_agent.errors import PipelineError
-
+def test_write_allowed_for_off_domain_attachment(ctx):
     trace: list[dict] = []
     dispatch_tool("read_text", {"path": str(ctx.query_path)}, trace, ctx=ctx)
     dispatch_tool("read_pdf", {"path": str(ctx.pdf_path)}, trace, ctx=ctx)
@@ -82,10 +80,11 @@ def test_write_rejected_for_off_domain_attachment(ctx):
     dispatch_tool("extract_evidence_pack", {"path": str(ctx.pdf_path)}, trace, ctx=ctx)
 
     md = "# 报告\n北极星 GMV\n获客 激活 留存 变现 传播\n健康指标 诊断指标\n目标值 黄色预警 红色预警\n周度 月度 季度\n"
-    with pytest.raises(PipelineError, match="E007"):
-        dispatch_tool(
-            "write_pdf_report",
-            {"content": md, "path": str(ctx.pdf_output_path)},
-            trace,
-            ctx=ctx,
-        )
+    result = dispatch_tool(
+        "write_pdf_report",
+        {"content": md, "path": str(ctx.pdf_output_path)},
+        trace,
+        ctx=ctx,
+    )
+    assert "报告已生成" in result
+    assert ctx.pdf_output_path.with_suffix(".md").exists()

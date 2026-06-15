@@ -81,7 +81,7 @@ def _app_version() -> str:
 
         return version("agentic-rubric-runner")
     except Exception:
-        return "0.4.6"
+        return "0.5.0"
 
 
 def _render_header(st) -> None:
@@ -218,6 +218,9 @@ def _render_grading_result(st, result, summary: dict[str, Any] | None = None) ->
 def _render_cached_results(st, outputs: dict[str, Any]) -> None:
     from aarrr_agent.schemas import GradingResult
 
+    if outputs.get("attachment_hint"):
+        st.info(outputs["attachment_hint"])
+
     _section(st, "Phase 1 — 报告生成")
     st.success(outputs.get("phase1_message", "报告生成完成"))
     st.caption("工具调用日志")
@@ -324,7 +327,6 @@ def _execute_pipeline(
 ) -> dict[str, Any]:
     from openai import OpenAI
 
-    from aarrr_agent.attachment_relevance import format_e007_user_message, preflight_attachment_pdf
     from aarrr_agent.pipeline import resolve_output_paths, run_phase1_pipeline, run_phase2_pipeline
 
     outputs: dict[str, Any] = {
@@ -342,6 +344,7 @@ def _execute_pipeline(
         "phase1_message": "",
         "phase2_message": "",
         "phase2_error": None,
+        "attachment_hint": None,
     }
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -353,12 +356,15 @@ def _execute_pipeline(
         pdf_path.write_bytes(pdf_bytes)
         rubrics_path.write_bytes(rubrics_bytes)
 
-        assessment = preflight_attachment_pdf(str(pdf_path))
-        if not assessment["relevant"]:
-            raise PipelineError(
-                "E007",
-                format_e007_user_message(assessment, filename=pdf_filename),
-            )
+        attachment_hint: str | None = None
+        try:
+            from aarrr_agent.attachment_relevance import format_e007_user_message, preflight_attachment_pdf
+
+            assessment = preflight_attachment_pdf(str(pdf_path))
+            if not assessment["relevant"]:
+                attachment_hint = format_e007_user_message(assessment, filename=pdf_filename)
+        except Exception:
+            attachment_hint = None
 
         client = OpenAI(api_key=api_key, base_url=base_url)
         paths = resolve_output_paths(tmp)
@@ -410,6 +416,8 @@ def _execute_pipeline(
             outputs["phase2_error"] = f"{exc.code}: {exc.message}"
         except Exception as exc:
             outputs["phase2_error"] = f"Rubric 评分失败：{exc}"
+
+        outputs["attachment_hint"] = attachment_hint
 
     return outputs
 
@@ -479,7 +487,7 @@ def run_console(*, configure_page: bool = True) -> None:
             pdf_file = st.file_uploader(
                 "源文档 PDF",
                 type=["pdf"],
-                help="须与 query 任务领域一致（社交电商/AARRR 增长策略）。课程、实验、机器人等 PDF 将被拒绝。",
+                help="可上传任意 PDF；若与 query 领域不一致，Phase 2 将自动压低得分。",
             )
             st.markdown(
                 _file_status_badge(
@@ -520,12 +528,8 @@ def run_console(*, configure_page: bool = True) -> None:
                 )
                 status.update(label="评审完成", state="complete")
             except PipelineError as exc:
-                if exc.code == "E007":
-                    status.update(label="附件校验未通过（预期拦截）", state="error")
-                    st.warning(exc.message)
-                else:
-                    status.update(label=f"运行失败：{exc}", state="error")
-                    st.error(str(exc))
+                status.update(label=f"运行失败：{exc}", state="error")
+                st.error(str(exc))
                 st.session_state[_SESSION_KEY] = None
                 st.stop()
             except Exception as exc:

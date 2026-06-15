@@ -216,10 +216,10 @@ def run_extract_evidence_pack(pdf_path: str, ctx: Phase1ToolContext) -> str:
 
     if not assessment["relevant"]:
         warning = (
-            f"[E007 警告] 附件与任务领域不匹配（领域词 {assessment['domain_hit_count']}，"
+            f"[提示] 附件与任务领域不完全匹配（领域词 {assessment['domain_hit_count']}，"
             f"离题信号 {assessment['off_domain_hit_count']}）。"
-            "不得编造附件中不存在的社交电商/AARRR 事实；"
-            "禁止将 DNS/实验报告等内容强行类比为增长指标。"
+            "仍可生成报告，但 Phase 2 评分将自动压低离题附件得分。"
+            "不得编造附件中不存在的社交电商/AARRR 事实。"
         )
         return f"{warning}\n\n证据包已生成: {ctx.evidence_path}（共 {len(pack.facts)} 条）。\n\n{preview[:2000]}"
 
@@ -243,11 +243,9 @@ def write_structured_report(report_data: dict[str, Any], pdf_path: str, ctx: Pha
         attachment_body = ctx._pdf_text_cache or ""
         if attachment_body and not assess_attachment_domain(attachment_body)["relevant"]:
             assessment = assess_attachment_domain(attachment_body)
-            raise PipelineError(
-                "E007",
-                "附件与社交电商/AARRR 增长领域不匹配，拒绝写入结构化报告。"
-                f"离题信号：{', '.join(assessment['off_domain_hits'][:6]) or '无'}。"
-                "请上传与任务一致的源文档 PDF。",
+            print(
+                f"[提示] 附件领域与任务不完全匹配，Phase 2 可能压低得分。"
+                f"离题信号：{', '.join(assessment['off_domain_hits'][:6]) or '无'}"
             )
 
     report = StructuredReport.model_validate(report_data)
@@ -292,24 +290,15 @@ def write_structured_report(report_data: dict[str, Any], pdf_path: str, ctx: Pha
 def write_pdf_report(content: str, pdf_path: str, ctx: Phase1ToolContext | None = None) -> str:
     if ctx is not None:
         pdf = ctx.assert_write_allowed(pdf_path)
-        from aarrr_agent.attachment_relevance import assess_attachment_domain, detect_forced_analogy_report
+        from aarrr_agent.attachment_relevance import assess_attachment_domain
 
         attachment_body = ctx._pdf_text_cache or ""
-        if attachment_body:
+        if attachment_body and not assess_attachment_domain(attachment_body)["relevant"]:
             assessment = assess_attachment_domain(attachment_body)
-            if not assessment["relevant"]:
-                detail = ", ".join(assessment["off_domain_hits"][:6]) or "领域词不足"
-                if detect_forced_analogy_report(content, attachment_body):
-                    raise PipelineError(
-                        "E007",
-                        "报告将离题附件强行类比为增长指标（如 DNS→AARRR），拒绝写入。"
-                        f"离题信号：{detail}。请使用与任务领域一致的附件。",
-                    )
-                raise PipelineError(
-                    "E007",
-                    "附件与社交电商/AARRR 增长领域不匹配，拒绝写入报告。"
-                    f"离题信号：{detail}。请上传正确的源文档 PDF。",
-                )
+            detail = ", ".join(assessment["off_domain_hits"][:6]) or "领域词不足"
+            print(
+                f"[提示] 附件领域与任务不完全匹配，Phase 2 可能压低得分。离题信号：{detail}"
+            )
     else:
         pdf = Path(pdf_path).resolve()
 
