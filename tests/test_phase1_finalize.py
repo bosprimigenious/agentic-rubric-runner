@@ -31,4 +31,4 @@ def test_finalize_raises_e007_for_irrelevant_attachment(tmp_path):
         _finalize_phase1(ctx, trace, phase1_done=True)
 
     assert exc.value.code == "E007"
-    assert "不匹配" in exc.value.message
+    assert "领域校验" in exc.value.message or "不一致" in exc.value.message

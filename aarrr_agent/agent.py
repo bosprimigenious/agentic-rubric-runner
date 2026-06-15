@@ -140,18 +140,13 @@ def _finalize_phase1(
     e007_in_trace = any("E007" in str(e.get("error", "")) for e in trace)
 
     if ctx.attachment_relevant is False or e007_in_trace:
-        from aarrr_agent.attachment_relevance import assess_attachment_domain
+        from aarrr_agent.attachment_relevance import assess_attachment_domain, format_e007_user_message
 
         body = ctx._pdf_text_cache or ""
-        off_hits = ""
-        if body:
-            off_hits = ", ".join(assess_attachment_domain(body).get("off_domain_hits", [])[:6])
-        detail = f" 离题信号：{off_hits}" if off_hits else ""
+        assessment = assess_attachment_domain(body) if body else None
         raise PipelineError(
             "E007",
-            "附件与任务领域不匹配（非社交电商/AARRR 增长文档），系统已拒绝写入报告。"
-            "请上传与 query 要求一致的增长策略 PDF，而非课程/实验/机器人等无关文档。"
-            f"{detail}",
+            format_e007_user_message(assessment, filename=ctx.pdf_path.name),
         )
 
     if phase1_done:

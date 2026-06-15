@@ -4,6 +4,7 @@ from aarrr_agent.attachment_relevance import (
     assess_attachment_domain,
     detect_forced_analogy_report,
     enforce_attachment_gate,
+    format_e007_user_message,
     h15_failed,
 )
 from aarrr_agent.grader import load_rubrics
@@ -53,6 +54,16 @@ def test_detect_forced_analogy_dns_report():
     dns = "DNS 中继服务器 select() RCODE dnsperf"
     report = "北极星指标如同 select() 主循环，获客类比 config_load 加载配置"
     assert detect_forced_analogy_report(report, dns)
+
+
+def test_format_e007_user_message():
+    msg = format_e007_user_message(
+        {"off_domain_hits": ["机器人", "实践训练"]},
+        filename="智能机器人实践训练指导书.pdf",
+    )
+    assert "不是系统故障" in msg
+    assert "智能机器人" in msg
+    assert "机器人" in msg
 
 
 def test_robot_training_guide_not_relevant():

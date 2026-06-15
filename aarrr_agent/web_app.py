@@ -79,7 +79,7 @@ def _app_version() -> str:
 
         return version("agentic-rubric-runner")
     except Exception:
-        return "0.4.4"
+        return "0.4.5"
 
 
 def _render_header(st) -> None:
@@ -318,9 +318,11 @@ def _execute_pipeline(
     api_key: str,
     base_url: str,
     model: str,
+    pdf_filename: str = "attachment.pdf",
 ) -> dict[str, Any]:
     from openai import OpenAI
 
+    from aarrr_agent.attachment_relevance import format_e007_user_message, preflight_attachment_pdf
     from aarrr_agent.errors import PipelineError
     from aarrr_agent.pipeline import resolve_output_paths, run_phase1_pipeline, run_phase2_pipeline
 
@@ -349,6 +351,13 @@ def _execute_pipeline(
         query_path.write_bytes(query_bytes)
         pdf_path.write_bytes(pdf_bytes)
         rubrics_path.write_bytes(rubrics_bytes)
+
+        assessment = preflight_attachment_pdf(str(pdf_path))
+        if not assessment["relevant"]:
+            raise PipelineError(
+                "E007",
+                format_e007_user_message(assessment, filename=pdf_filename),
+            )
 
         client = OpenAI(api_key=api_key, base_url=base_url)
         paths = resolve_output_paths(tmp)
@@ -466,7 +475,11 @@ def run_console(*, configure_page: bool = True) -> None:
                 unsafe_allow_html=True,
             )
         with c2:
-            pdf_file = st.file_uploader("源文档 PDF", type=["pdf"], help="attachment.pdf")
+            pdf_file = st.file_uploader(
+                "源文档 PDF",
+                type=["pdf"],
+                help="须与 query 任务领域一致（社交电商/AARRR 增长策略）。课程、实验、机器人等 PDF 将被拒绝。",
+            )
             st.markdown(
                 _file_status_badge(
                     pdf_file.name if pdf_file else None,
@@ -502,8 +515,18 @@ def run_console(*, configure_page: bool = True) -> None:
                     api_key=api_key,
                     base_url=base_url,
                     model=model,
+                    pdf_filename=pdf_file.name or "attachment.pdf",
                 )
                 status.update(label="评审完成", state="complete")
+            except PipelineError as exc:
+                if exc.code == "E007":
+                    status.update(label="附件校验未通过（预期拦截）", state="error")
+                    st.warning(exc.message)
+                else:
+                    status.update(label=f"运行失败：{exc}", state="error")
+                    st.error(str(exc))
+                st.session_state[_SESSION_KEY] = None
+                st.stop()
             except Exception as exc:
                 status.update(label=f"运行失败：{exc}", state="error")
                 st.session_state[_SESSION_KEY] = None

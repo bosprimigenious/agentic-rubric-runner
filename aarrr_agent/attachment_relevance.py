@@ -96,6 +96,34 @@ def assess_attachment_domain(attachment_text: str, query_text: str = "") -> dict
     }
 
 
+def format_e007_user_message(
+    assessment: dict[str, Any] | None = None,
+    *,
+    filename: str = "",
+) -> str:
+    """生成面向用户的 E007 说明（强调这是预期拦截，而非系统故障）。"""
+    off = ", ".join((assessment or {}).get("off_domain_hits", [])[:8])
+    parts = [
+        "附件与 query 要求的「社交电商 / AARRR 用户增长策略」领域不一致，无法据此生成指标方案。",
+    ]
+    if filename:
+        parts.append(f"当前文件：{filename}")
+    if off:
+        parts.append(f"离题信号：{off}")
+    parts.append(
+        "这是刻意的领域校验，不是系统故障。"
+        "请上传与任务描述一致的增长策略 PDF（如《基于AARRR模型的社交电商平台用户增长策略研究》）后重新运行。"
+    )
+    return " ".join(parts)
+
+
+def preflight_attachment_pdf(pdf_path: str) -> dict[str, Any]:
+    """运行 Phase 1 前快速检测附件领域，避免对离题 PDF 浪费 API 调用。"""
+    from aarrr_agent.tools import read_pdf
+
+    return assess_attachment_domain(read_pdf(pdf_path))
+
+
 def detect_forced_analogy_report(report_text: str, attachment_text: str) -> bool:
     """报告是否将离题附件（如 DNS 实验）强行类比为增长指标。"""
     assessment = assess_attachment_domain(attachment_text)
