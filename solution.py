@@ -7,12 +7,12 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from openai import OpenAI
 
 from aarrr_agent.agent import run_phase1_agent
 from aarrr_agent.grader import run_phase2_grader
-from aarrr_agent.pdf_gen import markdown_to_pdf
 from aarrr_agent.tools import save_trace
 
 
@@ -20,7 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="AARRR Agent Pipeline")
     parser.add_argument("--query", required=True, help="任务描述文件路径 (query.txt)")
     parser.add_argument("--pdf", required=True, help="学术附件 PDF 路径")
-    parser.add_argument("--rubrics", required=True, help="评分标准 rubrics.json 路径")
+    parser.add_argument("--rubrics", required=True, help="评分标准 rubrics.json 路径（仅 Phase 2 使用）")
     parser.add_argument("--phase1-out", default="phase1_output.pdf", help="Phase 1 PDF 输出路径")
     parser.add_argument("--grading-out", default="grading_result.json", help="Phase 2 评分输出路径")
     parser.add_argument("--trace-out", default="agent_trace.jsonl", help="Agent 工具调用轨迹")
@@ -47,21 +47,20 @@ def main() -> None:
     )
 
     trace: list[dict] = []
-    md_path = args.phase1_out.rsplit(".", 1)[0] + ".md" if "." in args.phase1_out else args.phase1_out + ".md"
+    pdf_path = args.phase1_out
+    md_path = str(Path(pdf_path).with_suffix(".md"))
 
     print("[Phase 1] Starting Agent...")
-    report_md = run_phase1_agent(
+    run_phase1_agent(
         query_path=args.query,
         pdf_path=args.pdf,
-        report_output_path=md_path,
+        pdf_output_path=pdf_path,
         client=client,
         model=args.model,
         trace=trace,
     )
-
-    print("[Phase 1] Converting to PDF...")
-    markdown_to_pdf(report_md, args.phase1_out)
-    print(f"[Phase 1] Done → {args.phase1_out}")
+    print(f"[Phase 1] Done → {pdf_path}")
+    print(f"[Phase 1] Markdown → {md_path}")
 
     save_trace(trace, args.trace_out)
     print(f"[Trace] Saved → {args.trace_out}")
@@ -71,7 +70,8 @@ def main() -> None:
 
     print("[Phase 2] Starting evaluator...")
     grading = run_phase2_grader(
-        phase1_pdf_path=args.phase1_out,
+        phase1_pdf_path=pdf_path,
+        phase1_md_path=md_path,
         rubrics_path=args.rubrics,
         query_path=args.query,
         attachment_pdf_path=args.pdf,

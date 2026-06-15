@@ -5,18 +5,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FONTS_DIR = PROJECT_ROOT / "fonts"
 
-# final_score 权重：与题目示例 (14/15, 18/24, 2/3 → 82.5) 一致
-SCORE_WEIGHTS = {
-    "hard": 50.0,
-    "soft": 30.0,
-    "optional": 20.0,
-}
-
-# Agent 循环上限
-MAX_AGENT_TURNS = 15
+# Agent 循环上限（read_text + read_pdf + 生成报告 + write_pdf_report 通常需 4-6 轮）
+MAX_AGENT_TURNS = 20
 
 # Phase 2 评分重试次数
 MAX_GRADING_ATTEMPTS = 3
 
-# 附件文本截断长度（控制 prompt 大小）
-ATTACHMENT_TEXT_LIMIT = 8000
+# Phase 2 prompt 中附件文本预算（字符数）；未超限时全文放入，超出时按页截取
+PROMPT_ATTACHMENT_BUDGET = 100_000

@@ -9,9 +9,9 @@ from typing import Any
 
 from openai import OpenAI
 
-from aarrr_agent.config import ATTACHMENT_TEXT_LIMIT, MAX_GRADING_ATTEMPTS, SCORE_WEIGHTS
+from aarrr_agent.config import MAX_GRADING_ATTEMPTS
 from aarrr_agent.schemas import GradingResult, ScoreBreakdown
-from aarrr_agent.tools import read_pdf, read_text
+from aarrr_agent.tools import fit_text_to_budget, read_pdf, read_text
 
 
 def load_rubrics(rubrics_path: str) -> dict[str, Any]:
@@ -79,7 +79,7 @@ def _normalize_grading_data(data: dict[str, Any], rubrics: dict[str, Any]) -> di
 def recalculate_scores(result: GradingResult, rubrics_path: str) -> GradingResult:
     """
     不信任模型计算的 breakdown 数字，程序强制重算 final_score。
-    权重：hard 50% + soft 30% + optional 20%（与题目示例一致）。
+    公式：总得分率 = (hard + soft + optional) / (hard_max + soft_max + optional_max) * 100
     """
     rubrics = load_rubrics(rubrics_path)
     rubric = rubrics["rubric"]
@@ -93,15 +93,9 @@ def recalculate_scores(result: GradingResult, rubrics_path: str) -> GradingResul
     optional_score = sum(c.score for c in result.optional_constraints)
     optional_max = len(rubric["optional_constraints"])
 
-    hard_ratio = hard_score / hard_max if hard_max else 0.0
-    soft_ratio = soft_score / soft_max if soft_max else 0.0
-    optional_ratio = optional_score / optional_max if optional_max else 0.0
-
-    final_score = (
-        hard_ratio * SCORE_WEIGHTS["hard"]
-        + soft_ratio * SCORE_WEIGHTS["soft"]
-        + optional_ratio * SCORE_WEIGHTS["optional"]
-    )
+    total_score = hard_score + soft_score + optional_score
+    total_max = hard_max + soft_max + optional_max
+    final_score = round(total_score / total_max * 100, 2) if total_max else 0.0
 
     result.score_breakdown = ScoreBreakdown(
         hard_score=hard_score,
@@ -110,7 +104,7 @@ def recalculate_scores(result: GradingResult, rubrics_path: str) -> GradingResul
         soft_max=soft_max,
         optional_score=optional_score,
         optional_max=optional_max,
-        final_score=round(final_score, 2),
+        final_score=final_score,
     )
     return result
 
@@ -122,6 +116,20 @@ def _clean_extracted_text(text: str) -> str:
     return text.strip()
 
 
+def load_submitted_document(phase1_pdf_path: str, phase1_md_path: str | None = None) -> str:
+    """
+    加载 Phase 1 提交内容。
+    优先读取 Markdown 源文件（结构最完整），不存在时再从 PDF 反抽文本。
+    """
+    md = Path(phase1_md_path) if phase1_md_path else Path(phase1_pdf_path).with_suffix(".md")
+    if md.exists():
+        print(f"[Phase 2] 使用 Markdown 源文件评分: {md}")
+        return md.read_text(encoding="utf-8")
+
+    print(f"[Phase 2] Markdown 不存在，回退到 PDF 文本抽取: {phase1_pdf_path}")
+    return _clean_extracted_text(read_pdf(phase1_pdf_path))
+
+
 def run_phase2_grader(
     phase1_pdf_path: str,
     rubrics_path: str,
@@ -129,14 +137,15 @@ def run_phase2_grader(
     attachment_pdf_path: str,
     client: OpenAI,
     model: str,
+    phase1_md_path: str | None = None,
 ) -> GradingResult:
     rubrics = load_rubrics(rubrics_path)
     id_map = build_constraint_id_map(rubrics)
 
     rubrics_text = read_text(rubrics_path)
-    phase1_text = _clean_extracted_text(read_pdf(phase1_pdf_path))
+    phase1_text = load_submitted_document(phase1_pdf_path, phase1_md_path)
     query_text = read_text(query_path)
-    attachment_text = _clean_extracted_text(read_pdf(attachment_pdf_path))
+    attachment_text = fit_text_to_budget(_clean_extracted_text(read_pdf(attachment_pdf_path)))
 
     prompt = f"""You are a strict evaluator. Grade the submitted document against the rubrics below.
 
@@ -149,8 +158,8 @@ RUBRICS:
 ORIGINAL QUERY:
 {query_text}
 
-REFERENCE ATTACHMENT (source PDF, truncated):
-{attachment_text[:ATTACHMENT_TEXT_LIMIT]}
+REFERENCE ATTACHMENT (source PDF):
+{attachment_text}
 
 SUBMITTED DOCUMENT (Phase 1 output):
 {phase1_text}
