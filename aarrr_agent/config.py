@@ -6,6 +6,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FONTS_DIR = PROJECT_ROOT / "fonts"
 
+# 对外链接（README / GitHub Pages / About 请与此保持一致）
+GITHUB_PAGES_URL = "https://bosprimigenious.github.io/agentic-rubric-runner/"
+STREAMLIT_APP_URL = "https://agentic-rubric-runner.streamlit.app/"
+GITHUB_REPO_URL = "https://github.com/bosprimigenious/agentic-rubric-runner"
+
 # PDF 渲染器：auto（先试 WeasyPrint，失败回退 ReportLab）| html | reportlab
 PDF_RENDERER = os.getenv("PDF_RENDERER", "auto")
 

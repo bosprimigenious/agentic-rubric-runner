@@ -432,9 +432,9 @@ def run_console(*, configure_page: bool = True) -> None:
             layout="wide",
             initial_sidebar_state="expanded",
             menu_items={
-                "Get help": "https://github.com/bosprimigenious/agentic-rubric-runner",
+                "Get help": "https://agentic-rubric-runner.streamlit.app/",
                 "Report a bug": "https://github.com/bosprimigenious/agentic-rubric-runner/issues",
-                "About": "文档评审控制台 — 可审计的 Rubric 流水线。",
+                "About": "文档评审控制台 — https://agentic-rubric-runner.streamlit.app/",
             },
         )
 

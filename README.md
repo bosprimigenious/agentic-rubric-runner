@@ -6,7 +6,7 @@
 
 | 项目信息 | |
 |----------|--|
-| 版本 | 0.4.0 |
+| 版本 | 0.5.0 |
 | Python | 3.10+（Streamlit Cloud 推荐 3.11） |
 | 默认模型 | DeepSeek `deepseek-chat`（OpenAI 兼容 API） |
 | 许可证 | MIT |
@@ -15,7 +15,7 @@
 |------|------|
 | 展示页 | https://bosprimigenious.github.io/agentic-rubric-runner/ |
 | 源码 | https://github.com/bosprimigenious/agentic-rubric-runner |
-| Web 控制台 | https://agentic-rubric-runner.streamlit.app/（可选演示层） |
+| Deploy Console | https://agentic-rubric-runner.streamlit.app/ |
 
 **产品入口**
 
@@ -279,7 +279,7 @@ agentic-rubric run ... --model deepseek-chat
 
 ## Web 控制台
 
-**在线体验：** [agentic-rubric-runner.streamlit.app](https://agentic-rubric-runner.streamlit.app/)
+**Deploy Console：** [agentic-rubric-runner.streamlit.app](https://agentic-rubric-runner.streamlit.app/)
 
 **文档评审控制台** 提供与 CLI 相同的后端能力：
 
