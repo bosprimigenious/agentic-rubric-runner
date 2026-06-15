@@ -13,6 +13,7 @@ def test_resolve_web_app_path_packaged():
 
 
 def test_web_app_importable():
-    import aarrr_agent.web_app  # noqa: F401
+    from aarrr_agent.web_app import run_console
 
-    assert Path(aarrr_agent.web_app.__file__).exists()
+    assert callable(run_console)
+    assert Path(__import__("aarrr_agent.web_app", fromlist=["__file__"]).__file__).exists()

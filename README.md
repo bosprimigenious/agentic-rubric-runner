@@ -256,12 +256,19 @@ agentic-rubric run ... --model deepseek-chat
 
 在 [share.streamlit.io](https://share.streamlit.io/) 打开你的应用 → 右下角 **Manage app** → **Settings**：
 
+你贴的是 **General** 标签。白屏还需要检查 **Sharing** 标签：
+
+| 设置项 | 正确值 |
+|--------|--------|
+| **Sharing → Who can view this app** | **This app is public and searchable** |
+
+**General 标签（你已打开）：**
+
 | 设置项 | 正确值 |
 |--------|--------|
 | Main file path | `app.py` |
-| Requirements file | `requirements.txt` 或 `requirements-web.txt`（二者等价） |
-| Python version | **3.11**（不要用 3.9 / 3.10） |
-| **Visibility** | **Public**（必须，见下方说明） |
+| Requirements file | `requirements.txt` |
+| Python version | **3.11**（**不要选 3.14**，当前日志显示 3.14.6 可能导致白屏） |
 
 > **已部署但整页空白 / 控制台报 `Unable to preload CSS`：** 多半是应用仍为 **Private**（仅工作区成员可访问）。此时静态资源会 303 跳转到 `share.streamlit.io/-/auth/app`，浏览器加载不了 CSS/JS，页面只剩灰色壳子。  
 > **处理：** Settings → **Visibility → Public** → Save → **Clear cache and redeploy**。

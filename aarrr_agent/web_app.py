@@ -1,41 +1,21 @@
 """Streamlit — Document Evaluation Console。
 
 包内 Web UI 实现，供 `agentic-rubric ui`（pip 安装）与根目录 `app.py`（Streamlit Cloud）共用。
-调用链：run_phase1_pipeline / run_phase2_pipeline → agent / grader。
 """
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-# 支持 streamlit run aarrr_agent/web_app.py（Cloud 或本地）
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
 import json
+import sys
 import tempfile
 import time
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-import streamlit as st
-from openai import OpenAI
-
-from aarrr_agent.errors import PipelineError
-from aarrr_agent.pipeline import resolve_output_paths, run_phase1_pipeline, run_phase2_pipeline
-
-st.set_page_config(
-    page_title="Document Evaluation Console",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        "Get help": "https://github.com/bosprimigenious/agentic-rubric-runner",
-        "Report a bug": "https://github.com/bosprimigenious/agentic-rubric-runner/issues",
-        "About": "Document Evaluation Console — auditable rubric pipeline.",
-    },
-)
+# 支持 streamlit run aarrr_agent/web_app.py
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 _CONSOLE_CSS = """
 <style>
@@ -85,15 +65,15 @@ _CONSOLE_CSS = """
 """
 
 
-def _inject_styles() -> None:
+def _inject_styles(st) -> None:
     st.markdown(_CONSOLE_CSS, unsafe_allow_html=True)
 
 
-def _section(title: str) -> None:
+def _section(st, title: str) -> None:
     st.markdown(f'<p class="section-label">{title}</p>', unsafe_allow_html=True)
 
 
-def _render_header() -> None:
+def _render_header(st) -> None:
     left, right = st.columns([6, 1])
     with left:
         st.markdown(
@@ -113,7 +93,7 @@ def _render_header() -> None:
         )
 
 
-def _render_trace(trace_path: Path) -> None:
+def _render_trace(st, trace_path: Path) -> None:
     for line in trace_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -130,10 +110,10 @@ def _render_trace(trace_path: Path) -> None:
         )
 
 
-def _render_grading_result(result) -> None:
+def _render_grading_result(st, result) -> None:
     bd = result.score_breakdown
 
-    _section("Results")
+    _section(st, "Results")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Final Score", f"{bd.final_score:.2f}")
     m2.metric("Hard Constraints", f"{bd.hard_score} / {bd.hard_max}")
@@ -179,52 +159,75 @@ def _render_grading_result(result) -> None:
     )
 
 
-_inject_styles()
-_render_header()
+def run_console(*, configure_page: bool = True) -> None:
+    """渲染 Streamlit 控制台。app.py 传入 configure_page=False 避免重复 set_page_config。"""
+    import streamlit as st
 
-st.markdown(
-    '<div class="notice-bar">'
-    "Credentials are required for each session. API keys are not stored, logged, or written to disk."
-    "</div>",
-    unsafe_allow_html=True,
-)
-
-with st.sidebar:
-    _section("Configuration")
-    api_key = st.text_input(
-        "Provider API Key",
-        type="password",
-        placeholder="Enter your provider API key",
-        help="Used only for this session. Not persisted.",
-    )
-    base_url = st.text_input("API Base URL", value="https://api.deepseek.com")
-    model = st.selectbox("Model", ["deepseek-chat", "deepseek-reasoner"], index=0)
-
-    with st.expander("Advanced", expanded=False):
-        st.caption(
-            "Scoring weights are derived from rubric.json at runtime. "
-            "Hard / soft / optional maxima are computed dynamically."
+    if configure_page:
+        st.set_page_config(
+            page_title="Document Evaluation Console",
+            layout="wide",
+            initial_sidebar_state="expanded",
+            menu_items={
+                "Get help": "https://github.com/bosprimigenious/agentic-rubric-runner",
+                "Report a bug": "https://github.com/bosprimigenious/agentic-rubric-runner/issues",
+                "About": "Document Evaluation Console — auditable rubric pipeline.",
+            },
         )
 
-_section("Input Files")
-with st.container(border=True):
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        query_file = st.file_uploader("Task Query", type=["txt"], help="query.txt")
-    with c2:
-        pdf_file = st.file_uploader("Source PDF", type=["pdf"], help="attachment.pdf")
-    with c3:
-        rubrics_file = st.file_uploader("Rubric JSON", type=["json"], help="rubrics.json")
+    _inject_styles(st)
+    _render_header(st)
 
-if query_file and pdf_file and rubrics_file and not api_key:
-    st.warning("Provider API Key is required before execution.")
+    st.markdown(
+        '<div class="notice-bar">'
+        "Credentials are required for each session. API keys are not stored, logged, or written to disk."
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
-_section("Execution")
-with st.container(border=True):
-    ready = all([query_file, pdf_file, rubrics_file, api_key])
-    run_btn = st.button("Run Evaluation", type="primary", disabled=not ready, use_container_width=False)
+    with st.sidebar:
+        _section(st, "Configuration")
+        api_key = st.text_input(
+            "Provider API Key",
+            type="password",
+            placeholder="Enter your provider API key",
+            help="Used only for this session. Not persisted.",
+        )
+        base_url = st.text_input("API Base URL", value="https://api.deepseek.com")
+        model = st.selectbox("Model", ["deepseek-chat", "deepseek-reasoner"], index=0)
 
-if run_btn:
+        with st.expander("Advanced", expanded=False):
+            st.caption(
+                "Scoring weights are derived from rubric.json at runtime. "
+                "Hard / soft / optional maxima are computed dynamically."
+            )
+
+    _section(st, "Input Files")
+    with st.container(border=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            query_file = st.file_uploader("Task Query", type=["txt"], help="query.txt")
+        with c2:
+            pdf_file = st.file_uploader("Source PDF", type=["pdf"], help="attachment.pdf")
+        with c3:
+            rubrics_file = st.file_uploader("Rubric JSON", type=["json"], help="rubrics.json")
+
+    if query_file and pdf_file and rubrics_file and not api_key:
+        st.warning("Provider API Key is required before execution.")
+
+    _section(st, "Execution")
+    with st.container(border=True):
+        ready = all([query_file, pdf_file, rubrics_file, api_key])
+        run_btn = st.button("Run Evaluation", type="primary", disabled=not ready, use_container_width=False)
+
+    if not run_btn:
+        return
+
+    from openai import OpenAI
+
+    from aarrr_agent.errors import PipelineError
+    from aarrr_agent.pipeline import resolve_output_paths, run_phase1_pipeline, run_phase2_pipeline
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         query_path = tmp / "query.txt"
@@ -240,7 +243,7 @@ if run_btn:
         phase1_ok = False
         grading_bytes: bytes | None = None
 
-        _section("Phase 1 — Report Generation")
+        _section(st, "Phase 1 — Report Generation")
         phase1_status = st.status("Running report generation…", expanded=True)
         phase1_turns = 0
 
@@ -254,7 +257,7 @@ if run_btn:
                     paths=paths,
                 )
                 st.caption("Tool execution log")
-                _render_trace(paths.trace_jsonl)
+                _render_trace(st, paths.trace_jsonl)
             phase1_status.update(label="Report generation complete", state="complete")
             phase1_ok = True
         except PipelineError as exc:
@@ -264,7 +267,7 @@ if run_btn:
             phase1_status.update(label=f"Report generation failed: {exc}", state="error")
             st.stop()
 
-        _section("Phase 2 — Rubric Evaluation")
+        _section(st, "Phase 2 — Rubric Evaluation")
         phase2_status = st.status("Running rubric evaluation…", expanded=True)
 
         try:
@@ -279,7 +282,7 @@ if run_btn:
                     phase1_turns=phase1_turns,
                     duration_seconds=time.perf_counter() - t0,
                 )
-                _render_grading_result(result)
+                _render_grading_result(st, result)
                 grading_bytes = paths.grading_json.read_bytes()
             phase2_status.update(label="Rubric evaluation complete", state="complete")
         except PipelineError as exc:
@@ -292,7 +295,7 @@ if run_btn:
                 st.warning("Phase 1 outputs remain available for download below.")
 
         if phase1_ok:
-            _section("Output Files")
+            _section(st, "Output Files")
             with st.container(border=True):
                 d1, d2, d3 = st.columns(3)
                 with d1:
@@ -330,3 +333,7 @@ if run_btn:
                         key="dl_trace",
                         use_container_width=True,
                     )
+
+
+if __name__ == "__main__":
+    run_console()
