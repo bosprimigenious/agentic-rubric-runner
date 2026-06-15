@@ -92,27 +92,25 @@ def write_run_meta(
         "outputs": {
             "pdf": str(paths.phase1_pdf.name),
             "markdown": str(paths.phase1_md.name),
-            "grading": str(paths.grading_json.name),
             "trace": str(paths.trace_jsonl.name),
         },
     }
     if rubrics is not None and rubrics.exists():
         meta["input_hash"]["rubrics"] = sha256_file(rubrics)
+        meta["outputs"]["grading"] = str(paths.grading_json.name)
 
     paths.run_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def run_pipeline(
+def run_phase1_pipeline(
     *,
     query: Path,
     pdf: Path,
-    rubrics: Path,
     client: OpenAI,
     model: str,
     paths: OutputPaths,
-    skip_phase2: bool = False,
-) -> GradingResult | None:
-    """执行完整双阶段流水线，写入 paths 指定目录。"""
+) -> int:
+    """只执行 Phase 1：Agent 生成报告、trace 与 run_meta。返回 trace 步数。"""
     t0 = time.perf_counter()
     trace: list[dict] = []
 
@@ -126,20 +124,31 @@ def run_pipeline(
         emergency_trace_path=str(paths.emergency_trace),
     )
     save_trace(trace, str(paths.trace_jsonl))
+    write_run_meta(
+        paths,
+        model=model,
+        query=query,
+        pdf=pdf,
+        rubrics=None,
+        duration_seconds=time.perf_counter() - t0,
+        phase1_turns=len(trace),
+        status="phase1_only",
+    )
+    return len(trace)
 
-    if skip_phase2:
-        write_run_meta(
-            paths,
-            model=model,
-            query=query,
-            pdf=pdf,
-            rubrics=rubrics,
-            duration_seconds=time.perf_counter() - t0,
-            phase1_turns=len(trace),
-            status="phase1_only",
-        )
-        return None
 
+def run_phase2_pipeline(
+    *,
+    query: Path,
+    pdf: Path,
+    rubrics: Path,
+    client: OpenAI,
+    model: str,
+    paths: OutputPaths,
+    phase1_turns: int,
+    duration_seconds: float,
+) -> GradingResult:
+    """只执行 Phase 2：Rubric 评分并更新 run_meta。"""
     result = run_phase2_grader(
         phase1_pdf_path=str(paths.phase1_pdf),
         phase1_md_path=str(paths.phase1_md),
@@ -159,8 +168,44 @@ def run_pipeline(
         query=query,
         pdf=pdf,
         rubrics=rubrics,
-        duration_seconds=time.perf_counter() - t0,
-        phase1_turns=len(trace),
+        duration_seconds=duration_seconds,
+        phase1_turns=phase1_turns,
         final_score=result.score_breakdown.final_score,
+        status="completed",
     )
     return result
+
+
+def run_pipeline(
+    *,
+    query: Path,
+    pdf: Path,
+    rubrics: Path,
+    client: OpenAI,
+    model: str,
+    paths: OutputPaths,
+    skip_phase2: bool = False,
+) -> GradingResult | None:
+    """执行完整双阶段流水线，写入 paths 指定目录。"""
+    t0 = time.perf_counter()
+    phase1_turns = run_phase1_pipeline(
+        query=query,
+        pdf=pdf,
+        client=client,
+        model=model,
+        paths=paths,
+    )
+
+    if skip_phase2:
+        return None
+
+    return run_phase2_pipeline(
+        query=query,
+        pdf=pdf,
+        rubrics=rubrics,
+        client=client,
+        model=model,
+        paths=paths,
+        phase1_turns=phase1_turns,
+        duration_seconds=time.perf_counter() - t0,
+    )

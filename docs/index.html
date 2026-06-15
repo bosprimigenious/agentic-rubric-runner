@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agentic Rubric Runner</title>
+  <meta name="description" content="Auditable Function-Calling Agent Workflow for PDF Generation and Rubric Evaluation" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="container">
+      <p class="eyebrow">Open Source · Python 3.10+</p>
+      <h1>Agentic Rubric Runner</h1>
+      <p class="subtitle">Auditable Function-Calling Agent Workflow for PDF Generation and Rubric Evaluation</p>
+      <div class="hero-actions">
+        <a class="btn primary" href="https://github.com/bosprimigenious/agentic-rubric-runner" target="_blank" rel="noopener">GitHub 仓库</a>
+        <a class="btn secondary" href="https://your-streamlit-demo-url" target="_blank" rel="noopener">Streamlit Demo</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>项目简介</h2>
+      <p>
+        <strong>agentic-rubric-runner</strong> 是一个可安装、可审计的文档约束型 Agent 流水线。
+        输入任务说明与 PDF 附件后，Agent 通过 Function Calling 自主读取文件、生成结构化报告并渲染为 PDF；
+        随后 Evaluator 依据 Rubric 标准自动评分，输出 JSON 结果与完整工具调用轨迹。
+      </p>
+      <p>适用于尽职调查审核、合规检查、提案评审等「参考文档 + 评分标准 → 生成产物并打分」场景。</p>
+    </section>
+
+    <section class="grid two-col">
+      <div class="card">
+        <h2>CLI 安装</h2>
+        <pre><code>git clone https://github.com/bosprimigenious/agentic-rubric-runner.git
+cd agentic-rubric-runner
+pip install -e ".[dev,web]"
+cp .env.example .env   # 填入 DEEPSEEK_API_KEY
+agentic-rubric --help</code></pre>
+      </div>
+      <div class="card">
+        <h2>CLI 运行示例</h2>
+        <pre><code># 只跑 Phase 1
+agentic-rubric phase1 \
+  --query fixtures/query.txt \
+  --pdf fixtures/attachment.pdf \
+  --out outputs/demo
+
+# 完整流水线
+agentic-rubric run \
+  --query fixtures/query.txt \
+  --pdf fixtures/attachment.pdf \
+  --rubrics fixtures/rubrics.json \
+  --out outputs/demo</code></pre>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Web UI</h2>
+      <p>Streamlit 界面支持上传 <code>query.txt</code>、<code>attachment.pdf</code>、<code>rubrics.json</code>，分步执行 Phase 1 与 Phase 2：</p>
+      <ul>
+        <li><strong>Phase 1</strong> — Agent 生成 PDF、Markdown 与 <code>agent_trace.jsonl</code></li>
+        <li><strong>Phase 2</strong> — Rubric 自动评分，下载 <code>grading_result.json</code></li>
+      </ul>
+      <pre><code>streamlit run app.py
+# 或
+agentic-rubric ui</code></pre>
+      <p>在线 Demo：<a href="https://your-streamlit-demo-url" target="_blank" rel="noopener">Streamlit Cloud</a>（部署后替换此链接）</p>
+    </section>
+
+    <section class="grid two-col">
+      <div class="card">
+        <h2>技术栈</h2>
+        <ul class="tags">
+          <li>Python 3.10+</li>
+          <li>OpenAI SDK (DeepSeek)</li>
+          <li>Function Calling</li>
+          <li>PyMuPDF</li>
+          <li>ReportLab</li>
+          <li>Pydantic v2</li>
+          <li>Typer + Rich</li>
+          <li>Streamlit</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>审计特性</h2>
+        <ul>
+          <li><code>agent_trace.jsonl</code> — 每步工具调用的 step / timestamp / duration_ms</li>
+          <li>Phase 1 路径白名单 — 禁止读取 rubrics.json</li>
+          <li><code>run_meta.json</code> — run_id 与输入文件 SHA256</li>
+          <li>结构化错误码 E001–E006</li>
+          <li>评分结果 Pydantic 校验 + 分数强制重算</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="card screenshot">
+      <h2>界面预览</h2>
+      <div class="placeholder">
+        <p>Web UI / CLI 截图占位</p>
+        <p class="muted">部署 Streamlit Cloud 后，可在此嵌入截图</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>MIT License · <a href="https://github.com/bosprimigenious/agentic-rubric-runner">bosprimigenious/agentic-rubric-runner</a></p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import typer
@@ -19,10 +20,15 @@ from aarrr_agent.config import PROJECT_ROOT
 from aarrr_agent.env import load_project_env
 from aarrr_agent.errors import PipelineError
 from aarrr_agent.grader import run_phase2_grader
-from aarrr_agent.pipeline import make_run_id, resolve_output_paths, run_pipeline
+from aarrr_agent.pipeline import (
+    OutputPaths,
+    make_run_id,
+    resolve_output_paths,
+    run_phase1_pipeline,
+    run_phase2_pipeline,
+)
 from aarrr_agent.reporting import print_score_summary
 from aarrr_agent.schemas import GradingResult
-from aarrr_agent.tools import save_trace
 
 app = typer.Typer(
     name="agentic-rubric",
@@ -30,6 +36,8 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+
+
 def _configure_stdio_utf8() -> None:
     if sys.platform == "win32":
         for stream in (sys.stdout, sys.stderr):
@@ -55,6 +63,81 @@ def make_client() -> OpenAI:
     )
 
 
+def _prepare_paths(
+    out: Path | None,
+    phase1_out: Path | None = None,
+    grading_out: Path | None = None,
+    trace_out: Path | None = None,
+) -> OutputPaths:
+    rid = make_run_id()
+    base_out = out if out is not None else Path("outputs") / rid
+    paths = resolve_output_paths(base_out, run_id=rid)
+    if phase1_out:
+        paths.phase1_pdf = phase1_out
+        paths.phase1_md = phase1_out.with_suffix(".md")
+    if grading_out:
+        paths.grading_json = grading_out
+    if trace_out:
+        paths.trace_jsonl = trace_out
+    return paths
+
+
+def _print_run_header(paths: OutputPaths) -> None:
+    console.print(f"run_id:   [bold]{paths.run_id}[/bold]")
+    console.print(f"输出目录: [cyan]{paths.directory.resolve()}[/cyan]")
+
+
+def _print_phase1_artifacts(paths: OutputPaths, turns: int) -> None:
+    console.print(f"[green]✓[/green] Phase 1 完成（{turns} 步工具调用）")
+    console.print(f"  MD    → {paths.phase1_md}")
+    console.print(f"  PDF   → {paths.phase1_pdf}")
+    console.print(f"  Trace → {paths.trace_jsonl}")
+    console.print(f"  Meta  → {paths.run_meta}")
+
+
+def _print_phase2_artifacts(paths: OutputPaths) -> None:
+    console.print(f"[green]✓[/green] Phase 2 完成")
+    console.print(f"  Grade → {paths.grading_json}")
+
+
+def _handle_pipeline_error(exc: PipelineError) -> None:
+    console.print(f"[red]{exc.code}[/red] {exc.message}")
+    raise typer.Exit(1) from exc
+
+
+@app.command()
+def phase1(
+    query: Path = typer.Option(..., "--query", help="任务描述 query.txt"),
+    pdf: Path = typer.Option(..., "--pdf", help="附件 PDF"),
+    out: Path | None = typer.Option(None, "--out", help="输出目录，例如 outputs/demo"),
+    phase1_out: Path | None = typer.Option(None, "--phase1-out", help="覆盖 Phase 1 PDF 路径"),
+    trace_out: Path | None = typer.Option(None, "--trace-out", help="覆盖 trace 路径"),
+    model: str = typer.Option("deepseek-chat", "--model", envvar="DEEPSEEK_MODEL"),
+) -> None:
+    """只运行 Phase 1：Agent 生成报告与 PDF（不读取 rubrics.json）。"""
+    paths = _prepare_paths(out, phase1_out=phase1_out, trace_out=trace_out)
+    client = make_client()
+
+    console.rule("[bold blue]Phase 1 — Agent 生成报告")
+    _print_run_header(paths)
+
+    try:
+        with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
+            task = progress.add_task("Agent 运行中...", total=None)
+            turns = run_phase1_pipeline(
+                query=query,
+                pdf=pdf,
+                client=client,
+                model=model,
+                paths=paths,
+            )
+            progress.update(task, description="[green]Phase 1 完成")
+    except PipelineError as exc:
+        _handle_pipeline_error(exc)
+
+    _print_phase1_artifacts(paths, turns)
+
+
 @app.command()
 def run(
     query: Path = typer.Option(..., "--query", help="任务描述 query.txt"),
@@ -68,46 +151,54 @@ def run(
     skip_phase2: bool = typer.Option(False, "--skip-phase2", help="仅运行 Phase 1"),
 ) -> None:
     """完整双阶段流水线：Agent 生成报告 + Rubric 自动评分。"""
-    rid = make_run_id()
-    base_out = out if out is not None else Path("outputs") / rid
-    paths = resolve_output_paths(base_out, run_id=rid)
-    if phase1_out:
-        paths.phase1_pdf = phase1_out
-        paths.phase1_md = phase1_out.with_suffix(".md")
-    if grading_out:
-        paths.grading_json = grading_out
-    if trace_out:
-        paths.trace_jsonl = trace_out
-
+    paths = _prepare_paths(out, phase1_out, grading_out, trace_out)
     client = make_client()
-    console.rule("[bold blue]Phase 1 + Phase 2 流水线")
-    console.print(f"输出目录: [cyan]{paths.directory}[/cyan]  run_id={paths.run_id}")
+    t0 = time.perf_counter()
 
+    console.rule("[bold blue]Agentic Rubric Runner — 完整流水线")
+    _print_run_header(paths)
+
+    console.rule("[bold cyan]Phase 1 — Agent 生成报告")
     try:
         with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
-            task = progress.add_task("运行中...", total=None)
-            result = run_pipeline(
+            task = progress.add_task("Agent 运行中...", total=None)
+            phase1_turns = run_phase1_pipeline(
+                query=query,
+                pdf=pdf,
+                client=client,
+                model=model,
+                paths=paths,
+            )
+            progress.update(task, description="[green]Phase 1 完成")
+    except PipelineError as exc:
+        _handle_pipeline_error(exc)
+
+    _print_phase1_artifacts(paths, phase1_turns)
+
+    if skip_phase2:
+        console.print("[yellow]已跳过 Phase 2（--skip-phase2）[/yellow]")
+        return
+
+    console.rule("[bold cyan]Phase 2 — Rubric 评分")
+    try:
+        with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
+            task = progress.add_task("评分中...", total=None)
+            result = run_phase2_pipeline(
                 query=query,
                 pdf=pdf,
                 rubrics=rubrics,
                 client=client,
                 model=model,
                 paths=paths,
-                skip_phase2=skip_phase2,
+                phase1_turns=phase1_turns,
+                duration_seconds=time.perf_counter() - t0,
             )
-            progress.update(task, description="[green]完成")
+            progress.update(task, description="[green]Phase 2 完成")
     except PipelineError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(1) from exc
+        _handle_pipeline_error(exc)
 
-    console.print(f"[green]✓[/green] PDF   → {paths.phase1_pdf}")
-    console.print(f"[green]✓[/green] MD    → {paths.phase1_md}")
-    console.print(f"[green]✓[/green] Trace → {paths.trace_jsonl}")
-    console.print(f"[green]✓[/green] Meta  → {paths.run_meta}")
-
-    if result is not None:
-        console.print(f"[green]✓[/green] Grade → {paths.grading_json}")
-        print_score_summary(result)
+    _print_phase2_artifacts(paths)
+    print_score_summary(result)
 
 
 @app.command()
@@ -121,6 +212,7 @@ def grade(
 ) -> None:
     """单独运行 Phase 2 评分。"""
     client = make_client()
+    console.rule("[bold blue]Phase 2 — Rubric 评分")
     try:
         result = run_phase2_grader(
             phase1_pdf_path=str(phase1),
@@ -132,8 +224,7 @@ def grade(
             model=model,
         )
     except PipelineError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(1) from exc
+        _handle_pipeline_error(exc)
 
     out.write_text(json.dumps(result.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8")
     console.print(f"[green]✓[/green] {out}")
@@ -219,10 +310,6 @@ def init(
             encoding="utf-8",
         )
 
-    env_example = Path(".env.example")
-    if env_example.exists() and not (target / ".env.example").exists():
-        pass
-
     fixture_pdf = PROJECT_ROOT / "fixtures" / "attachment.pdf"
     attachment = target / "attachment.pdf"
     if fixture_pdf.exists() and not attachment.exists():
@@ -236,7 +323,10 @@ def init(
     else:
         console.print("  - attachment.pdf（请自行放入）")
     console.print("  - outputs/")
-    console.print(f"运行: agentic-rubric run --query {target}/query.txt --pdf {target}/attachment.pdf --rubrics {target}/rubrics.json")
+    console.print(
+        f"运行: agentic-rubric phase1 --query {target}/query.txt "
+        f"--pdf {target}/attachment.pdf --out {target}/outputs"
+    )
 
 
 @app.command()
