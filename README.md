@@ -30,27 +30,39 @@
 
 ---
 
-## 工作原理
+## 架构
+
+CLI、Web 与 `solution.py` 共用同一套 `pipeline` / `agent` / `grader` 后端，不通过子进程调脚本。
 
 ```mermaid
 flowchart TB
+    subgraph entry [入口层]
+        CLI["agentic-rubric CLI<br/>run · phase1 · grade · validate · ui"]
+        WEB["Streamlit Console<br/>aarrr_agent/web_app.py"]
+        SOL[solution.py]
+    end
+
+    subgraph core [核心层 aarrr_agent]
+        PL["pipeline.py<br/>路径解析 · run_meta · 双阶段编排"]
+
+        subgraph phase1 [Phase 1 — agent.py]
+            direction LR
+            T1[read_text] --> T2[read_pdf] --> T3[write_pdf_report]
+        end
+
+        subgraph phase2 [Phase 2 — grader.py]
+            direction LR
+            G1[读取报告 + rubrics] --> G2[逐条约束评分] --> G3[程序重算 final_score]
+        end
+
+        PL --> phase1
+        PL --> phase2
+    end
+
     subgraph inputs [输入]
         Q[query.txt]
         P[attachment.pdf]
         R[rubrics.json]
-    end
-
-    subgraph phase1 [Phase 1 — Agent]
-        T1[read_text]
-        T2[read_pdf]
-        T3[write_pdf_report]
-        T1 --> T2 --> T3
-    end
-
-    subgraph phase2 [Phase 2 — Grader]
-        G[逐条约束评分]
-        S[程序重算 final_score]
-        G --> S
     end
 
     subgraph outputs [输出]
@@ -61,31 +73,43 @@ flowchart TB
         META[run_meta.json]
     end
 
+    CLI --> PL
+    WEB --> PL
+    SOL --> CLI
+
     Q --> T1
     P --> T2
+    R --> G1
     T3 --> MD
     T3 --> PDF
-    R --> G
-    MD --> G
-    PDF --> G
+    MD --> G1
+    PDF --> G1
+    G3 --> GR
     phase1 --> TR
-    phase2 --> GR
-    phase1 --> META
+    PL --> META
     phase2 --> META
 ```
+
+| 层 | 模块 | 职责 |
+|----|------|------|
+| **入口** | `cli.py` | `run` / `phase1` / `grade` / `validate` / `inspect-trace` / `init` / `ui` |
+| **入口** | `web_app.py` | 分步调用 `run_phase1_pipeline` + `run_phase2_pipeline` |
+| **编排** | `pipeline.py` | 输出路径、`run_meta`、Phase 1 / 2 串联 |
+| **Phase 1** | `agent.py` | Function Calling 工具循环：`read_text` → `read_pdf` → `write_pdf_report` |
+| **Phase 2** | `grader.py` | 按 Rubric 逐条评分，Pydantic 校验，程序重算 `final_score` |
+| **工具** | `tools.py` / `pdf_gen.py` | 文件读取、PDF 文本提取、ReportLab 渲染 |
 
 **Phase 1 约束**
 
 - Agent 只能访问 `query.txt` 与附件 PDF，**不读取** `rubrics.json`（避免评分标准泄露到生成阶段）。
-- 必须依次调用 `read_text` → `read_pdf` → `write_pdf_report` 三个工具；缺少任一步会触发错误码 E003。
-- 报告内容须覆盖 query 中的全部要求，指标数据须来自 PDF 附件。
+- 必须依次调用 `read_text` → `read_pdf` → `write_pdf_report`；缺少任一步触发 E003。
+- 报告须覆盖 query 全部要求，指标数据须来自 PDF 附件。
 
 **Phase 2 流程**
 
-- 读取 Phase 1 的 Markdown / PDF 与 `rubrics.json`。
-- 对 hard / soft / optional 三类约束逐条评分（0 或 1）。
-- 用 Pydantic 校验输出结构，缺失条目自动补 0 分。
-- 按权重公式重算 `final_score` 并写入结果文件。
+- 读取 Phase 1 产物（Markdown / PDF）与 `rubrics.json`。
+- 对 hard / soft / optional 三类约束逐条评分（0 或 1），缺失条目自动补 0 分。
+- 按权重公式重算 `final_score` 并写入 `grading_result.json`。
 
 ---
 
