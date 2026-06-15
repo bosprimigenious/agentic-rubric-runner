@@ -14,4 +14,4 @@ python_version = "3.11"
 # Advanced > Secrets: 不填 DEEPSEEK_API_KEY
 
 # 部署后 App URL（当前生产环境）：
-app_url = "https://agentic-rubric-runner-ajswk9uybbsa6cfasiudrx.streamlit.app/"
+app_url = "https://agentic-rubric-runner.streamlit.app/"

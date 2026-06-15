@@ -15,7 +15,7 @@
 |------|------|
 | 展示页 | https://bosprimigenious.github.io/agentic-rubric-runner/ |
 | 源码 | https://github.com/bosprimigenious/agentic-rubric-runner |
-| Web 控制台 | https://agentic-rubric-runner-ajswk9uybbsa6cfasiudrx.streamlit.app/ |
+| Web 控制台 | https://agentic-rubric-runner.streamlit.app/ |
 
 ---
 
@@ -235,7 +235,7 @@ agentic-rubric run ... --model deepseek-chat
 
 ## Web 控制台
 
-**在线地址：** https://agentic-rubric-runner-ajswk9uybbsa6cfasiudrx.streamlit.app/
+**在线地址：** https://agentic-rubric-runner.streamlit.app/
 
 **Document Evaluation Console** 提供与 CLI 相同的后端能力，面向非命令行用户：
 
@@ -248,7 +248,7 @@ agentic-rubric run ... --model deepseek-chat
 
 ### Streamlit Cloud 部署与排错
 
-**当前在线地址：** https://agentic-rubric-runner-ajswk9uybbsa6cfasiudrx.streamlit.app/
+**当前在线地址：** https://agentic-rubric-runner.streamlit.app/
 
 应用已创建后，若页面**空白 / 只有灰色背景 / 看不见内容**，按下面顺序排查（多数情况是云端配置未更新，而非代码未部署）：
 
@@ -261,7 +261,10 @@ agentic-rubric run ... --model deepseek-chat
 | Main file path | `app.py` |
 | Requirements file | `requirements.txt` 或 `requirements-web.txt`（二者等价） |
 | Python version | **3.11**（不要用 3.9 / 3.10） |
-| Visibility | **Public** |
+| **Visibility** | **Public**（必须，见下方说明） |
+
+> **已部署但整页空白 / 控制台报 `Unable to preload CSS`：** 多半是应用仍为 **Private**（仅工作区成员可访问）。此时静态资源会 303 跳转到 `share.streamlit.io/-/auth/app`，浏览器加载不了 CSS/JS，页面只剩灰色壳子。  
+> **处理：** Settings → **Visibility → Public** → Save → **Clear cache and redeploy**。
 
 改完后点击 **Save**，再点 **Clear cache and redeploy**（或 **Reboot app**），等待 2–5 分钟，浏览器 **Ctrl+Shift+R** 硬刷新。
 
