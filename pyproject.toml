@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aarrr-agent"
+version = "0.1.0"
+description = "Agentic document evaluation pipeline with rubric-based PDF grading"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "openai>=1.30.0",
+    "pymupdf>=1.24.0",
+    "reportlab>=4.0.0",
+    "pydantic>=2.0.0",
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+web = ["streamlit>=1.35.0"]
+dev = ["pytest>=7.0", "pytest-mock", "black", "ruff", "streamlit>=1.35.0"]
+
+[project.scripts]
+aarrr-agent = "aarrr_agent.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aarrr_agent"]

@@ -1,4 +1,7 @@
+# 与 pyproject.toml 同步；推荐 pip install -e .
 openai>=1.30.0
 pymupdf>=1.24.0
 reportlab>=4.0.0
 pydantic>=2.0.0
+typer>=0.12.0
+rich>=13.0.0
