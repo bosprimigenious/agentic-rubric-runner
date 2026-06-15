@@ -137,6 +137,7 @@ class Phase1ToolContext:
     _allowed_reads: set[Path] = field(init=False, repr=False)
     _allowed_writes: set[Path] = field(init=False, repr=False)
     _pdf_text_cache: str | None = field(default=None, repr=False)
+    attachment_relevant: bool | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.query_path = Path(self.query_path).resolve()
@@ -194,6 +195,9 @@ def read_pdf_phase1(path: str, ctx: Phase1ToolContext) -> str:
     allowed = ctx.assert_read_allowed(path)
     text = read_pdf(str(allowed))
     ctx._pdf_text_cache = text
+    from aarrr_agent.attachment_relevance import assess_attachment_domain
+
+    ctx.attachment_relevant = assess_attachment_domain(text)["relevant"]
     return text
 
 
@@ -208,6 +212,7 @@ def run_extract_evidence_pack(pdf_path: str, ctx: Phase1ToolContext) -> str:
     )
     save_evidence_pack(pack, ctx.evidence_path)
     preview = format_evidence_for_prompt(pack)
+    ctx.attachment_relevant = assessment["relevant"]
 
     if not assessment["relevant"]:
         warning = (

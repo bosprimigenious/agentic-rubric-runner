@@ -55,6 +55,13 @@ def test_detect_forced_analogy_dns_report():
     assert detect_forced_analogy_report(report, dns)
 
 
+def test_robot_training_guide_not_relevant():
+    text = "智能机器人实践训练指导书 嵌入式 单片机 智能车 STM32"
+    result = assess_attachment_domain(text)
+    assert not result["relevant"]
+    assert result["off_domain_hit_count"] >= 1
+
+
 def test_gate_caps_score_for_irrelevant_attachment():
     rubrics = load_rubrics("fixtures/rubrics.json")
     result = GradingResult(
