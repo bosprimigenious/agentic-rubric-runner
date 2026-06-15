@@ -327,6 +327,7 @@ agentic-rubric run ... --model deepseek-chat
 |------------|------|
 | `ModuleNotFoundError: aarrr_agent` | Requirements file 填错或 `main` 未拉到最新代码 → 改为 `requirements-streamlit.txt` 并 redeploy |
 | `No such file: requirements-streamlit.txt` | 拉取最新 `main`，或改用 `requirements-web.txt` |
+| `apt install` 失败 / `libgdk-pixbuf` | 勿在 `packages.txt` 添加易随 Debian 版本变化的 WeasyPrint 系统包；仅保留 `fonts-noto-cjk` |
 | `pip install` 失败 | 检查 Python 版本是否为 3.11 |
 
 #### 第三步：区分浏览器警告与真实故障
@@ -349,7 +350,7 @@ agentic-rubric run ... --model deepseek-chat
 | `requirements.txt` | CLI / 核心 Python 依赖 |
 | `requirements-web.txt` | 核心 + Streamlit（本地 Web） |
 | `requirements-streamlit.txt` | Streamlit Cloud 部署入口（推荐填此项） |
-| `packages.txt` | 系统包：`fonts-noto-cjk`、WeasyPrint 依赖（`libpango` 等） |
+| `packages.txt` | 系统包：仅 `fonts-noto-cjk`（PDF 在云端走 ReportLab 回退，不装 WeasyPrint 系统依赖） |
 | `app.py` | Streamlit 入口 |
 | `.streamlit/config.toml` | 主题配置 |
 
