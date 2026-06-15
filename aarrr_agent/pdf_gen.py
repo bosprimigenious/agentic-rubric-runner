@@ -15,6 +15,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from aarrr_agent.config import FONTS_DIR
+from aarrr_agent.errors import PipelineError
 
 _FONT_REGISTERED = False
 _FONT_NAME = "Chinese"
@@ -54,9 +55,10 @@ def register_chinese_font() -> str:
         except Exception:
             continue
 
-    raise RuntimeError(
+    raise PipelineError(
+        "E006",
         "未找到可用中文字体。请将 NotoSansCJK-Regular.ttc 放入 fonts/ 目录，"
-        "或确保系统已安装微软雅黑/黑体等中文字体。"
+        "或确保系统已安装微软雅黑/黑体等中文字体。",
     )
 
 

@@ -161,7 +161,7 @@ def write_pdf_report(content: str, pdf_path: str, ctx: Phase1ToolContext | None 
 
     issues = validate_report_content(content)
     if issues:
-        print(f"[警告] 报告可能不完整: {issues}")
+        print(f"[E004 警告] 报告可能不完整: {issues}")
 
     pdf.parent.mkdir(parents=True, exist_ok=True)
     md_path = pdf.with_suffix(".md")
