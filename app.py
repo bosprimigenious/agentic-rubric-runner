@@ -10,10 +10,8 @@ from pathlib import Path
 import streamlit as st
 from openai import OpenAI
 
-from aarrr_agent.agent import run_phase1_agent
 from aarrr_agent.errors import PipelineError
-from aarrr_agent.grader import run_phase2_grader
-from aarrr_agent.tools import save_trace
+from aarrr_agent.pipeline import resolve_output_paths, run_pipeline
 
 st.set_page_config(
     page_title="Agentic Document Evaluator",
@@ -68,7 +66,7 @@ if run_btn:
         trace_jsonl = tmp / "agent_trace.jsonl"
 
         client = OpenAI(api_key=api_key, base_url=base_url)
-        trace: list[dict] = []
+        paths = resolve_output_paths(tmp)
 
         st.divider()
         st.subheader("Phase 1 — Agent 生成报告")
@@ -76,17 +74,22 @@ if run_btn:
 
         try:
             with phase1_status:
-                run_phase1_agent(
-                    query_path=str(query_path),
-                    pdf_path=str(pdf_path),
-                    pdf_output_path=str(phase1_pdf),
+                result = run_pipeline(
+                    query=query_path,
+                    pdf=pdf_path,
+                    rubrics=rubrics_path,
                     client=client,
                     model=model,
-                    trace=trace,
-                    emergency_trace_path=str(tmp / "agent_trace_emergency.jsonl"),
+                    paths=paths,
+                    skip_phase2=False,
                 )
-                save_trace(trace, str(trace_jsonl))
-                for entry in trace:
+                trace_jsonl = paths.trace_jsonl
+                phase1_pdf = paths.phase1_pdf
+                grading_json = paths.grading_json
+                for line in trace_jsonl.read_text(encoding="utf-8").splitlines():
+                    if not line.strip():
+                        continue
+                    entry = json.loads(line)
                     dur = entry.get("duration_ms", "?")
                     icon = "✅" if entry.get("status") == "ok" else "❌"
                     st.write(f"{icon} {entry.get('tool')}  {dur}ms")
@@ -116,25 +119,11 @@ if run_btn:
             st.stop()
 
         st.subheader("Phase 2 — Rubric 评分")
-        phase2_status = st.status("评分中...", expanded=True)
+        phase2_status = st.status("评分完成", expanded=True)
 
         try:
-            with phase2_status:
-                result = run_phase2_grader(
-                    phase1_pdf_path=str(phase1_pdf),
-                    phase1_md_path=str(phase1_md),
-                    rubrics_path=str(rubrics_path),
-                    query_path=str(query_path),
-                    attachment_pdf_path=str(pdf_path),
-                    client=client,
-                    model=model,
-                )
-                grading_json.write_text(
-                    json.dumps(result.model_dump(), ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
-
             phase2_status.update(label="Phase 2 完成", state="complete")
+            assert result is not None
 
             st.divider()
             st.subheader("📊 评分结果")

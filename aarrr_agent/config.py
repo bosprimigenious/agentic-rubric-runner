@@ -11,6 +11,9 @@ MAX_AGENT_TURNS = 20
 # Phase 2 评分重试次数
 MAX_GRADING_ATTEMPTS = 3
 
+# LLM 调用重试次数
+MAX_LLM_RETRIES = 3
+
 # Phase 2 prompt 中附件文本预算（字符数）；未超限时全文放入，超出时按页截取
 PROMPT_ATTACHMENT_BUDGET = 100_000
 

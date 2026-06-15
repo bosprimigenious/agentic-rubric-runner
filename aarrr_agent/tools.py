@@ -12,9 +12,10 @@ from typing import Any
 
 import fitz
 
-from aarrr_agent.config import MIN_REPORT_CONTENT_CHARS, PROMPT_ATTACHMENT_BUDGET
+from aarrr_agent.config import PROMPT_ATTACHMENT_BUDGET
 from aarrr_agent.errors import PipelineError
 from aarrr_agent.pdf_gen import markdown_to_pdf
+from aarrr_agent.validation import validate_report_content
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -158,11 +159,9 @@ def write_pdf_report(content: str, pdf_path: str, ctx: Phase1ToolContext | None 
     else:
         pdf = Path(pdf_path).resolve()
 
-    if len(content) < MIN_REPORT_CONTENT_CHARS:
-        print(
-            f"[警告] 报告内容过短 ({len(content)} 字符)，"
-            f"低于建议阈值 {MIN_REPORT_CONTENT_CHARS}，可能被模型截断"
-        )
+    issues = validate_report_content(content)
+    if issues:
+        print(f"[警告] 报告可能不完整: {issues}")
 
     pdf.parent.mkdir(parents=True, exist_ok=True)
     md_path = pdf.with_suffix(".md")

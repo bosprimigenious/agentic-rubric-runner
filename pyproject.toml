@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "aarrr-agent"
-version = "0.1.0"
-description = "Agentic document evaluation pipeline with rubric-based PDF grading"
+name = "agentic-rubric-runner"
+version = "0.2.0"
+description = "A lightweight, auditable agent workflow for document-grounded PDF generation and rubric-based evaluation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -20,10 +20,14 @@ dependencies = [
 
 [project.optional-dependencies]
 web = ["streamlit>=1.35.0"]
-dev = ["pytest>=7.0", "pytest-mock", "black", "ruff", "streamlit>=1.35.0"]
+dev = ["pytest>=7.0", "pytest-mock", "black", "ruff", "build>=1.2.0", "streamlit>=1.35.0"]
 
 [project.scripts]
+agentic-rubric = "aarrr_agent.cli:main"
 aarrr-agent = "aarrr_agent.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aarrr_agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

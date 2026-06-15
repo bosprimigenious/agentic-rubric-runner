@@ -1,140 +1,130 @@
 # agentic-rubric-runner
 
-**输入文档 + 评分标准 → Agent 生成报告 → 自动评分 → 输出结果**
+**轻量、可审计的文档约束型 Agent 工作流**：输入任务说明 + PDF 附件 + 评分标准 → Agent 生成 PDF 报告 → Evaluator 自动评分 → 输出 JSON + 审计 trace。
 
-适用于尽职调查审核、合规检查、提案评审、内容质量把关等文档评估场景。
+适用场景：尽职调查审核、合规检查、提案评审、内容质量把关。
 
-- **Phase 1**：自实现 function calling tool-use loop（模型自主决定调用工具）
-- **Phase 2**：严格 evaluator + Pydantic 校验 + 程序重算分数
+## 版本路线
 
-## 技术栈
-
-| 组件 | 选型 |
+| 版本 | 能力 |
 |------|------|
-| 语言 | Python 3.10+ |
-| 模型接口 | openai SDK（兼容 DeepSeek） |
-| Agent 机制 | 自实现 tool-use loop |
-| CLI | Typer + Rich |
-| Web UI | Streamlit（可选） |
-| PDF 读取 | PyMuPDF |
-| PDF 生成 | ReportLab + NotoSansCJK / 系统字体 |
-| JSON 校验 | Pydantic v2 |
-| 审计轨迹 | agent_trace.jsonl |
-
-不使用 LangGraph、LangChain、CrewAI、WeasyPrint。
+| V0.1 | `solution.py` 面试题交付 |
+| V0.2 | 路径白名单、trace、API 重试、.md 优先评分、章节完整性检查 |
+| V0.3 | `pip install` + `agentic-rubric` CLI |
+| V0.4 | Streamlit Web UI |
 
 ## 安装
 
 ```bash
-# 开发安装（推荐）
-pip install -e .
-
-# 含 Streamlit 界面
-pip install -e ".[web]"
-
-# 仅依赖文件安装
-pip install -r requirements.txt
+pip install -e .              # 开发安装
+pip install -e ".[web]"       # 含 Streamlit
+pip install -e ".[dev]"       # 含 pytest / ruff
 ```
 
-## CLI 用法
+## 三种运行方式
+
+### 1. 面试题模式（保留）
 
 ```bash
 export DEEPSEEK_API_KEY="your_key"
-export DEEPSEEK_BASE_URL="https://api.deepseek.com"
 
-# 完整双阶段流水线
-aarrr-agent run \
+python solution.py \
   --query fixtures/query.txt \
   --pdf fixtures/attachment.pdf \
   --rubrics fixtures/rubrics.json
-
-# 仅 Phase 1
-aarrr-agent run --query fixtures/query.txt --pdf fixtures/attachment.pdf \
-  --rubrics fixtures/rubrics.json --skip-phase2
-
-# 单独 Phase 2 评分
-aarrr-agent grade \
-  --phase1 phase1_output.pdf \
-  --rubrics fixtures/rubrics.json \
-  --query fixtures/query.txt \
-  --attachment fixtures/attachment.pdf
-
-# 校验评分结果
-aarrr-agent validate grading_result.json
-
-aarrr-agent --help
 ```
 
-向后兼容：`python solution.py` 仍可用（转发到 CLI）。
+### 2. CLI 工具模式（推荐）
 
-## Streamlit 界面
+```bash
+# 完整流水线，输出到目录
+agentic-rubric run \
+  --query fixtures/query.txt \
+  --pdf fixtures/attachment.pdf \
+  --rubrics fixtures/rubrics.json \
+  --out outputs/demo
+
+# 仅 Phase 2
+agentic-rubric grade \
+  --phase1 outputs/demo/phase1_output.pdf \
+  --query fixtures/query.txt \
+  --attachment fixtures/attachment.pdf \
+  --rubrics fixtures/rubrics.json
+
+agentic-rubric validate outputs/demo/grading_result.json
+agentic-rubric inspect-trace outputs/demo/agent_trace.jsonl
+agentic-rubric init my-task
+agentic-rubric ui
+```
+
+别名：`aarrr-agent` 与 `agentic-rubric` 等价。
+
+### 3. Web UI
 
 ```bash
 pip install -e ".[web]"
 streamlit run app.py
+# 或
+agentic-rubric ui
 ```
-
-部署 Streamlit Cloud：Main file 填 `app.py`，Secrets 设置 `DEEPSEEK_API_KEY`。
-
-## 项目结构
-
-```
-agentic-rubric-runner/
-├── pyproject.toml
-├── app.py                  # Streamlit 界面
-├── aarrr_agent/
-│   ├── cli.py              # Typer CLI
-│   ├── agent.py            # Phase 1 tool-use loop
-│   ├── tools.py
-│   ├── grader.py
-│   ├── errors.py           # E001/E002/E003
-│   └── ...
-├── fonts/
-└── fixtures/
-```
-
-## Phase 隔离
-
-| 阶段 | 可读输入 |
-|------|---------|
-| Phase 1 Agent | 仅 `query.txt` + 附件 PDF（代码级路径白名单） |
-| Phase 2 Evaluator | Phase 1 产物 + rubrics.json + query + 附件 |
 
 ## 输出产物
 
-| 文件 | 说明 |
-|------|------|
-| `phase1_output.pdf` | Phase 1 正式交付物 |
-| `phase1_output.md` | Markdown 源（Phase 2 优先读取） |
-| `grading_result.json` | Phase 2 评分结果 |
-| `agent_trace.jsonl` | 工具调用审计轨迹 |
+```
+outputs/demo/
+├── phase1_output.pdf
+├── phase1_output.md
+├── grading_result.json
+├── agent_trace.jsonl
+└── run_meta.json          # run_id + input sha256 + 耗时
+```
 
 ## 评分公式
 
 ```
-total_score = hard_score + soft_score + optional_score
-total_max   = hard_max + soft_max + optional_max
-final_score = total_score / total_max × 100
+final_score = (hard_score + soft_score + optional_score)
+            / (hard_max + soft_max + optional_max) × 100
 ```
 
-分母从 `rubrics.json` **动态计算**（非硬编码 15/24/3）。程序强制重算，不信任模型 breakdown。
+`hard_max` / `soft_max` / `optional_max` 从 `rubrics.json` 动态计算。程序强制重算，不信任模型 breakdown。
+
+## 企业级特性（已实现）
+
+- **可审计**：`agent_trace.jsonl` 含 step / timestamp / duration_ms
+- **工具沙箱**：Phase 1 仅可读 query + 附件 PDF
+- **确定性校验**：Pydantic + 分数重算 + 缺失项补 0
+- **run 元数据**：`run_meta.json` 含 input hash，便于复现对比
 
 ## 错误码
 
 | 代码 | 含义 |
 |------|------|
-| E001 | API 调用失败 / 超时 |
+| E001 | LLM/API 失败或缺少 API Key |
 | E002 | PDF 抽取无文本 |
-| E003 | 评分 JSON 校验失败 |
+| E003 | Agent 未调用必要工具 |
+| E005 | Grading JSON 校验失败 |
 
-## 中文字体
+## 测试
 
-将 `NotoSansCJK-Regular.ttc` 放入 `fonts/`，或依赖系统字体（Windows 微软雅黑等）。
-
-## Agent 工具链
-
-```
-read_text(query) → read_pdf(附件) → write_pdf_report → .md + .pdf
+```bash
+pytest -q
+python -m build
 ```
 
-trace 含 `step`、`timestamp`、`duration_ms`。
+CI：`.github/workflows/ci.yml`（push 自动测试 + 打包 artifact）
+
+## 环境变量
+
+复制 `.env.example` 为 `.env`（勿提交）：
+
+```
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+## 技术栈
+
+Python 3.10+ · OpenAI SDK · DeepSeek · PyMuPDF · ReportLab · Pydantic v2 · Typer · Rich · Streamlit
+
+不使用 LangGraph / LangChain / WeasyPrint。

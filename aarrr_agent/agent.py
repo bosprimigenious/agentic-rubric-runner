@@ -8,8 +8,9 @@ from typing import Any
 
 from openai import OpenAI
 
-from aarrr_agent.config import API_TIMEOUT_SECONDS, MAX_AGENT_TURNS
+from aarrr_agent.config import MAX_AGENT_TURNS
 from aarrr_agent.errors import PipelineError
+from aarrr_agent.llm import call_chat_completion
 from aarrr_agent.tools import TOOLS, Phase1ToolContext, dispatch_tool, save_trace
 
 SYSTEM_PROMPT = """你是一个专业的增长分析 Agent。
@@ -100,19 +101,16 @@ def run_phase1_agent(
     for turn in range(MAX_AGENT_TURNS):
         print(f"[Agent] Turn {turn + 1}/{MAX_AGENT_TURNS}...")
         try:
-            response = client.chat.completions.create(
+            response = call_chat_completion(
+                client,
                 model=model,
                 messages=messages,
                 tools=TOOLS,
                 tool_choice="auto",
-                timeout=API_TIMEOUT_SECONDS,
             )
-        except Exception as exc:
+        except PipelineError:
             save_trace(trace, emergency_trace_path)
-            raise PipelineError(
-                "E001",
-                f"API 失败（Turn {turn + 1}/{MAX_AGENT_TURNS}）: {exc}",
-            ) from exc
+            raise
 
         msg = response.choices[0].message
         messages.append(_message_to_dict(msg))
@@ -145,7 +143,7 @@ def run_phase1_agent(
     called_tools = {entry["tool"] for entry in trace}
     missing = REQUIRED_TOOLS - called_tools
     if missing:
-        raise RuntimeError(f"Agent 未调用必要工具: {', '.join(sorted(missing))}")
+        raise PipelineError("E003", f"Agent 未调用必要工具: {', '.join(sorted(missing))}")
 
     if not report_content:
         md_path = Path(pdf_output_path).with_suffix(".md")

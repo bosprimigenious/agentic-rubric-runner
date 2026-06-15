@@ -9,8 +9,9 @@ from typing import Any
 
 from openai import OpenAI
 
-from aarrr_agent.config import API_TIMEOUT_SECONDS, MAX_GRADING_ATTEMPTS
+from aarrr_agent.config import MAX_GRADING_ATTEMPTS
 from aarrr_agent.errors import PipelineError
+from aarrr_agent.llm import call_chat_completion
 from aarrr_agent.schemas import GradingResult, ScoreBreakdown
 from aarrr_agent.tools import fit_text_to_budget, read_pdf, read_text
 
@@ -192,11 +193,11 @@ Output ONLY valid JSON, no markdown fences, no explanation outside JSON:
 
     for attempt in range(MAX_GRADING_ATTEMPTS):
         try:
-            response = client.chat.completions.create(
+            response = call_chat_completion(
+                client,
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
-                timeout=API_TIMEOUT_SECONDS,
             )
 
             raw = _strip_json_fences(response.choices[0].message.content or "")
@@ -213,6 +214,6 @@ Output ONLY valid JSON, no markdown fences, no explanation outside JSON:
                 print(f"[Phase 2] 第 {attempt + 1} 次尝试失败，重试... ({exc})")
 
     raise PipelineError(
-        "E003",
+        "E005",
         f"Grading JSON 校验失败（{MAX_GRADING_ATTEMPTS} 次重试后）: {last_error}",
     )

@@ -3,10 +3,16 @@ __pycache__/
 *.pyc
 *.pyo
 .env
+outputs/
+dist/
+build/
+*.egg-info/
+agent_trace_emergency.jsonl
 phase1_output.pdf
 phase1_output.md
 grading_result.json
 agent_trace.jsonl
+run_meta.json
 fonts/*.ttf
 fonts/*.ttc
 samples/
