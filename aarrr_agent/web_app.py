@@ -22,11 +22,17 @@ st.set_page_config(
     page_title="Document Evaluation Console",
     layout="wide",
     initial_sidebar_state="expanded",
+    menu_items={
+        "Get help": "https://github.com/bosprimigenious/agentic-rubric-runner",
+        "Report a bug": "https://github.com/bosprimigenious/agentic-rubric-runner/issues",
+        "About": "Document Evaluation Console — auditable rubric pipeline.",
+    },
 )
 
 _CONSOLE_CSS = """
 <style>
-  #MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; height: 0; }
+  /* 勿隐藏 stHeader / MainMenu：在 Streamlit Cloud 新版本中会导致整页空白 */
+  footer { visibility: hidden; }
   .block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1180px; }
   .console-header { margin-bottom: 0.25rem; }
   .console-title {

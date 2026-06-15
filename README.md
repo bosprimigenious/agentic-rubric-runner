@@ -254,7 +254,9 @@ agentic-rubric run ... --model deepseek-chat
 
 | 现象 | 处理 |
 |------|------|
-| `ModuleNotFoundError: aarrr_agent` | 确认 `main` 含 `aarrr_agent/` 且入口为根目录 `app.py` |
+| 页面空白、只有灰色背景 | 确认 Requirements file 为 `requirements.txt`（**不是** `requirements-web.txt`）；Python 版本选 **3.11**；在控制台 **Reboot app** 或 **Clear cache and redeploy** |
+| 控制台 `Unrecognized feature: 'battery'` 等 | 浏览器对 Streamlit iframe 权限的**无害警告**，可忽略 |
+| `ModuleNotFoundError: aarrr_agent` | 确认 `requirements.txt` 含 `.[web]`，且 `main` 分支已 push |
 | 中文字体 E006 | 确认根目录 `packages.txt` 含 `fonts-noto-cjk` |
 | 需要登录才能访问 | 应用设置中改为 **Public** |
 
