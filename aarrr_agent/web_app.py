@@ -1,7 +1,4 @@
-"""Streamlit — Document Evaluation Console。
-
-包内 Web UI 实现，供 `agentic-rubric ui`（pip 安装）与根目录 `app.py`（Streamlit Cloud）共用。
-"""
+"""Streamlit — 文档评审控制台。"""
 
 from __future__ import annotations
 
@@ -12,7 +9,6 @@ import time
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-# 支持 streamlit run aarrr_agent/web_app.py
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -31,13 +27,13 @@ _CONSOLE_CSS = """
   }
   .badge-public {
     display: inline-block; font-size: 0.72rem; font-weight: 600;
-    letter-spacing: 0.06em; text-transform: uppercase;
+    letter-spacing: 0.06em;
     color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe;
     border-radius: 4px; padding: 0.35rem 0.65rem; text-align: right;
   }
   .section-label {
     font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase; color: #94a3b8; margin: 0 0 0.5rem 0;
+    color: #64748b; margin: 0 0 0.5rem 0;
   }
   .notice-bar {
     font-size: 0.82rem; color: #475569; background: #f8fafc;
@@ -78,16 +74,15 @@ def _render_header(st) -> None:
     with left:
         st.markdown(
             '<div class="console-header">'
-            '<p class="console-title">Document Evaluation Console</p>'
-            '<p class="console-subtitle">Upload source materials, run a controlled review pipeline, '
-            "and export auditable results.</p>"
+            '<p class="console-title">文档评审控制台</p>'
+            '<p class="console-subtitle">上传任务材料，运行受控评审流水线，导出可审计结果。</p>'
             "</div>",
             unsafe_allow_html=True,
         )
     with right:
         st.markdown(
             '<div style="text-align:right;padding-top:0.35rem;">'
-            '<span class="badge-public">Public Demo</span>'
+            '<span class="badge-public">公开演示</span>'
             "</div>",
             unsafe_allow_html=True,
         )
@@ -100,7 +95,7 @@ def _render_trace(st, trace_path: Path) -> None:
         entry = json.loads(line)
         status = entry.get("status", "?")
         css = "trace-ok" if status == "ok" else "trace-fail"
-        label = "PASS" if status == "ok" else "FAIL"
+        label = "通过" if status == "ok" else "失败"
         tool = entry.get("tool", "?")
         dur = entry.get("duration_ms", "?")
         st.markdown(
@@ -113,40 +108,40 @@ def _render_trace(st, trace_path: Path) -> None:
 def _render_grading_result(st, result) -> None:
     bd = result.score_breakdown
 
-    _section(st, "Results")
+    _section(st, "评分结果")
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Final Score", f"{bd.final_score:.2f}")
-    m2.metric("Hard Constraints", f"{bd.hard_score} / {bd.hard_max}")
-    m3.metric("Soft Constraints", f"{bd.soft_score} / {bd.soft_max}")
-    m4.metric("Optional Checks", f"{bd.optional_score} / {bd.optional_max}")
+    m1.metric("最终得分", f"{bd.final_score:.2f}")
+    m2.metric("硬约束", f"{bd.hard_score} / {bd.hard_max}")
+    m3.metric("软约束", f"{bd.soft_score} / {bd.soft_max}")
+    m4.metric("可选项", f"{bd.optional_score} / {bd.optional_max}")
 
     c1, c2, c3 = st.columns(3)
     with c1:
         if bd.hard_max:
-            st.progress(bd.hard_score / bd.hard_max, text="Hard")
+            st.progress(bd.hard_score / bd.hard_max, text="硬约束")
     with c2:
         if bd.soft_max:
-            st.progress(bd.soft_score / bd.soft_max, text="Soft")
+            st.progress(bd.soft_score / bd.soft_max, text="软约束")
     with c3:
         if bd.optional_max:
-            st.progress(bd.optional_score / bd.optional_max, text="Optional")
+            st.progress(bd.optional_score / bd.optional_max, text="可选")
 
-    with st.expander("Hard Constraints — detail", expanded=False):
+    with st.expander("硬约束明细", expanded=False):
         for h in result.hard_constraints:
-            mark = "PASS" if h.score else "FAIL"
+            mark = "通过" if h.score else "未通过"
             css = "result-pass" if h.score else "result-fail"
             st.markdown(
                 f'<span class="{css}">{mark}</span> **{h.id}** — {escape(h.reason)}',
                 unsafe_allow_html=True,
             )
 
-    with st.expander("Soft Constraints — detail", expanded=False):
+    with st.expander("软约束明细", expanded=False):
         for s in result.soft_constraints:
-            st.markdown(f"**{s.id}** · score {s.score}/4 — {escape(s.reason)}")
+            st.markdown(f"**{s.id}** · 得分 {s.score}/4 — {escape(s.reason)}")
 
-    with st.expander("Optional Checks — detail", expanded=False):
+    with st.expander("可选项明细", expanded=False):
         for o in result.optional_constraints:
-            mark = "PASS" if o.score else "SKIP"
+            mark = "通过" if o.score else "跳过"
             css = "result-pass" if o.score else ""
             st.markdown(
                 f'<span class="{css}">{mark}</span> **{o.id}** — {escape(o.reason)}',
@@ -154,24 +149,24 @@ def _render_grading_result(st, result) -> None:
             )
 
     st.markdown(
-        f'<div class="notice-bar"><strong>Summary</strong><br>{escape(result.overall_comment)}</div>',
+        f'<div class="notice-bar"><strong>总评</strong><br>{escape(result.overall_comment)}</div>',
         unsafe_allow_html=True,
     )
 
 
 def run_console(*, configure_page: bool = True) -> None:
-    """渲染 Streamlit 控制台。app.py 传入 configure_page=False 避免重复 set_page_config。"""
+    """渲染 Streamlit 控制台。"""
     import streamlit as st
 
     if configure_page:
         st.set_page_config(
-            page_title="Document Evaluation Console",
+            page_title="文档评审控制台",
             layout="wide",
             initial_sidebar_state="expanded",
             menu_items={
                 "Get help": "https://github.com/bosprimigenious/agentic-rubric-runner",
                 "Report a bug": "https://github.com/bosprimigenious/agentic-rubric-runner/issues",
-                "About": "Document Evaluation Console — auditable rubric pipeline.",
+                "About": "文档评审控制台 — 可审计的 Rubric 流水线。",
             },
         )
 
@@ -180,45 +175,45 @@ def run_console(*, configure_page: bool = True) -> None:
 
     st.markdown(
         '<div class="notice-bar">'
-        "Credentials are required for each session. API keys are not stored, logged, or written to disk."
+        "每次会话需自备 API 密钥。密钥不会存储、记录或写入磁盘。"
         "</div>",
         unsafe_allow_html=True,
     )
 
     with st.sidebar:
-        _section(st, "Configuration")
+        _section(st, "配置")
         api_key = st.text_input(
-            "Provider API Key",
+            "API 密钥",
             type="password",
-            placeholder="Enter your provider API key",
-            help="Used only for this session. Not persisted.",
+            placeholder="请输入 DeepSeek API 密钥",
+            help="仅用于本次会话，不会持久化。",
         )
-        base_url = st.text_input("API Base URL", value="https://api.deepseek.com")
-        model = st.selectbox("Model", ["deepseek-chat", "deepseek-reasoner"], index=0)
+        base_url = st.text_input("API 地址", value="https://api.deepseek.com")
+        model = st.selectbox("模型", ["deepseek-chat", "deepseek-reasoner"], index=0)
 
-        with st.expander("Advanced", expanded=False):
+        with st.expander("高级选项", expanded=False):
             st.caption(
-                "Scoring weights are derived from rubric.json at runtime. "
-                "Hard / soft / optional maxima are computed dynamically."
+                "评分权重由 rubrics.json 在运行时动态计算，"
+                "硬约束 / 软约束 / 可选项满分随 Rubric 条目数变化。"
             )
 
-    _section(st, "Input Files")
+    _section(st, "输入文件")
     with st.container(border=True):
         c1, c2, c3 = st.columns(3)
         with c1:
-            query_file = st.file_uploader("Task Query", type=["txt"], help="query.txt")
+            query_file = st.file_uploader("任务描述", type=["txt"], help="query.txt")
         with c2:
-            pdf_file = st.file_uploader("Source PDF", type=["pdf"], help="attachment.pdf")
+            pdf_file = st.file_uploader("源文档 PDF", type=["pdf"], help="attachment.pdf")
         with c3:
-            rubrics_file = st.file_uploader("Rubric JSON", type=["json"], help="rubrics.json")
+            rubrics_file = st.file_uploader("评分标准", type=["json"], help="rubrics.json")
 
     if query_file and pdf_file and rubrics_file and not api_key:
-        st.warning("Provider API Key is required before execution.")
+        st.warning("运行前请先填写 API 密钥。")
 
-    _section(st, "Execution")
+    _section(st, "执行")
     with st.container(border=True):
         ready = all([query_file, pdf_file, rubrics_file, api_key])
-        run_btn = st.button("Run Evaluation", type="primary", disabled=not ready, use_container_width=False)
+        run_btn = st.button("运行评审", type="primary", disabled=not ready, use_container_width=False)
 
     if not run_btn:
         return
@@ -243,8 +238,8 @@ def run_console(*, configure_page: bool = True) -> None:
         phase1_ok = False
         grading_bytes: bytes | None = None
 
-        _section(st, "Phase 1 — Report Generation")
-        phase1_status = st.status("Running report generation…", expanded=True)
+        _section(st, "Phase 1 — 报告生成")
+        phase1_status = st.status("正在生成报告…", expanded=True)
         phase1_turns = 0
 
         try:
@@ -256,19 +251,19 @@ def run_console(*, configure_page: bool = True) -> None:
                     model=model,
                     paths=paths,
                 )
-                st.caption("Tool execution log")
+                st.caption("工具调用日志")
                 _render_trace(st, paths.trace_jsonl)
-            phase1_status.update(label="Report generation complete", state="complete")
+            phase1_status.update(label="报告生成完成", state="complete")
             phase1_ok = True
         except PipelineError as exc:
             phase1_status.update(label=f"{exc.code}: {exc.message}", state="error")
             st.stop()
         except Exception as exc:
-            phase1_status.update(label=f"Report generation failed: {exc}", state="error")
+            phase1_status.update(label=f"报告生成失败：{exc}", state="error")
             st.stop()
 
-        _section(st, "Phase 2 — Rubric Evaluation")
-        phase2_status = st.status("Running rubric evaluation…", expanded=True)
+        _section(st, "Phase 2 — Rubric 评分")
+        phase2_status = st.status("正在执行 Rubric 评分…", expanded=True)
 
         try:
             with phase2_status:
@@ -284,23 +279,23 @@ def run_console(*, configure_page: bool = True) -> None:
                 )
                 _render_grading_result(st, result)
                 grading_bytes = paths.grading_json.read_bytes()
-            phase2_status.update(label="Rubric evaluation complete", state="complete")
+            phase2_status.update(label="Rubric 评分完成", state="complete")
         except PipelineError as exc:
             phase2_status.update(label=f"{exc.code}: {exc.message}", state="error")
             if phase1_ok:
-                st.warning("Phase 1 outputs remain available for download below.")
+                st.warning("Phase 1 产物仍可于下方下载。")
         except Exception as exc:
-            phase2_status.update(label=f"Rubric evaluation failed: {exc}", state="error")
+            phase2_status.update(label=f"Rubric 评分失败：{exc}", state="error")
             if phase1_ok:
-                st.warning("Phase 1 outputs remain available for download below.")
+                st.warning("Phase 1 产物仍可于下方下载。")
 
         if phase1_ok:
-            _section(st, "Output Files")
+            _section(st, "输出文件")
             with st.container(border=True):
                 d1, d2, d3 = st.columns(3)
                 with d1:
                     st.download_button(
-                        "Download Report PDF",
+                        "下载报告 PDF",
                         paths.phase1_pdf.read_bytes(),
                         "phase1_output.pdf",
                         "application/pdf",
@@ -310,7 +305,7 @@ def run_console(*, configure_page: bool = True) -> None:
                 with d2:
                     if grading_bytes:
                         st.download_button(
-                            "Download Grading JSON",
+                            "下载评分 JSON",
                             grading_bytes,
                             "grading_result.json",
                             "application/json",
@@ -319,14 +314,14 @@ def run_console(*, configure_page: bool = True) -> None:
                         )
                     else:
                         st.button(
-                            "Download Grading JSON",
+                            "下载评分 JSON",
                             disabled=True,
                             use_container_width=True,
-                            help="Available after Phase 2 completes successfully.",
+                            help="Phase 2 成功完成后可下载。",
                         )
                 with d3:
                     st.download_button(
-                        "Download Trace Log",
+                        "下载审计轨迹",
                         paths.trace_jsonl.read_bytes(),
                         "agent_trace.jsonl",
                         "text/plain",

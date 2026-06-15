@@ -13,7 +13,7 @@ if str(_ROOT) not in sys.path:
 import streamlit as st
 
 st.set_page_config(
-    page_title="Document Evaluation Console",
+    page_title="文档评审控制台",
     layout="wide",
     initial_sidebar_state="expanded",
 )

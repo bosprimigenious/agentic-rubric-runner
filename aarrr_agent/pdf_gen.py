@@ -42,10 +42,24 @@ TEXT_MUTED = colors.HexColor("#64748b")
 HR_COLOR = colors.HexColor("#e2e8f0")
 
 
+def _glob_noto_fonts() -> list[Path]:
+    """在 Linux 等系统目录中搜索 Noto CJK 字体。"""
+    found: list[Path] = []
+    for root in (Path("/usr/share/fonts"), Path("/usr/local/share/fonts")):
+        if not root.exists():
+            continue
+        for pattern in ("NotoSansCJK*.ttc", "NotoSerifCJK*.ttc", "NotoSansCJK*.otf"):
+            found.extend(root.rglob(pattern))
+    return sorted(set(found))
+
+
 def _candidate_font_paths() -> list[Path]:
     candidates = [
+        FONTS_DIR / "msyh.ttc",
+        FONTS_DIR / "msyhbd.ttc",
         FONTS_DIR / "NotoSansCJK-Regular.ttc",
         FONTS_DIR / "NotoSansCJK-Regular.ttf",
+        *_glob_noto_fonts(),
         Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
         Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
         Path("/System/Library/Fonts/PingFang.ttc"),
@@ -54,7 +68,15 @@ def _candidate_font_paths() -> list[Path]:
         Path("C:/Windows/Fonts/simhei.ttf"),
         Path("C:/Windows/Fonts/simsun.ttc"),
     ]
-    return [p for p in candidates if p.exists()]
+    seen: set[Path] = set()
+    ordered: list[Path] = []
+    for p in candidates:
+        if p in seen:
+            continue
+        seen.add(p)
+        if p.exists():
+            ordered.append(p)
+    return ordered
 
 
 def register_chinese_font() -> str:
@@ -76,8 +98,8 @@ def register_chinese_font() -> str:
 
     raise PipelineError(
         "E006",
-        "未找到可用中文字体。请将 NotoSansCJK-Regular.ttc 放入 fonts/ 目录，"
-        "或确保系统已安装微软雅黑/黑体等中文字体。",
+        "未找到可用中文字体。请将 msyh.ttc 或 NotoSansCJK-Regular.ttc 放入 fonts/ 目录，"
+        "或在 Streamlit Cloud 确认 packages.txt 含 fonts-noto-cjk。",
     )
 
 

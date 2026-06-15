@@ -16,8 +16,10 @@ phase1_output.md
 grading_result.json
 agent_trace.jsonl
 run_meta.json
-fonts/*.ttf
-fonts/*.ttc
+fonts/*
+!fonts/.gitkeep
+!fonts/README.md
+!fonts/msyh.ttc
 samples/
 *.pdf
 !fixtures/attachment.pdf
