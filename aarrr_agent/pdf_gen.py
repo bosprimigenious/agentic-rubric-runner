@@ -258,7 +258,7 @@ def _title_banner(title: str, styles: dict[str, ParagraphStyle]) -> list:
     return [
         banner,
         Spacer(1, 4 * mm),
-        _para("由 Agentic Rubric Runner 自动生成", styles["subtitle"]),
+        _para("Document Evaluation Console — generated report", styles["subtitle"]),
         HRFlowable(width="100%", thickness=1, color=HR_COLOR, spaceBefore=2, spaceAfter=10),
     ]
 

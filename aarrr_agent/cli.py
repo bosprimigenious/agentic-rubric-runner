@@ -32,7 +32,7 @@ from aarrr_agent.schemas import GradingResult
 
 app = typer.Typer(
     name="agentic-rubric",
-    help="轻量、可审计的文档约束型 Agent 工作流：PDF 生成 + Rubric 评分",
+    help="文档约束型评审流水线：报告生成 + Rubric 评分",
     add_completion=False,
     no_args_is_help=True,
 )
@@ -155,7 +155,7 @@ def run(
     client = make_client()
     t0 = time.perf_counter()
 
-    console.rule("[bold blue]Agentic Rubric Runner — 完整流水线")
+    console.rule("[bold blue]Document Evaluation — Full Pipeline")
     _print_run_header(paths)
 
     console.rule("[bold cyan]Phase 1 — Agent 生成报告")
@@ -329,14 +329,26 @@ def init(
     )
 
 
+def resolve_web_app_path() -> Path:
+    """定位 Streamlit 入口脚本（pip 安装后使用包内 web_app.py）。"""
+    packaged = Path(__file__).resolve().parent / "web_app.py"
+    if packaged.exists():
+        return packaged
+    repo_root = Path(__file__).resolve().parent.parent / "app.py"
+    if repo_root.exists():
+        return repo_root
+    raise FileNotFoundError("未找到 Streamlit 入口：aarrr_agent/web_app.py")
+
+
 @app.command()
 def ui() -> None:
     """启动 Streamlit Web 界面。"""
-    app_path = Path(__file__).resolve().parent.parent / "app.py"
-    if not app_path.exists():
-        console.print("[red]未找到 app.py，请在项目根目录运行 streamlit run app.py[/red]")
-        raise typer.Exit(1)
-    console.print("[cyan]启动 Streamlit...[/cyan]")
+    try:
+        app_path = resolve_web_app_path()
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    console.print(f"[cyan]启动 Streamlit: {app_path}[/cyan]")
     raise typer.Exit(subprocess.call([sys.executable, "-m", "streamlit", "run", str(app_path)]))
 
 

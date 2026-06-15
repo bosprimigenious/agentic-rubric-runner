@@ -1,2 +1,0 @@
-# Streamlit Cloud 默认读取根目录 requirements.txt；本文件供本地 pip install -r 参考
--r requirements.txt

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""向后兼容入口：等价于 `aarrr-agent run ...`。"""
+"""兼容入口：转发至 `agentic-rubric run`。"""
 
 from __future__ import annotations
 
 import sys
 
-from aarrr_agent.cli import app
+from aarrr_agent.cli import main
 
 if __name__ == "__main__":
     sys.argv.insert(1, "run")
-    app()
+    main()
