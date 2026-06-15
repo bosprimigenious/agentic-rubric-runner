@@ -15,7 +15,7 @@
 |------|------|
 | 展示页 | https://bosprimigenious.github.io/agentic-rubric-runner/ |
 | 源码 | https://github.com/bosprimigenious/agentic-rubric-runner |
-| Web 控制台 | 见下方 [Streamlit Cloud 部署](#streamlit-cloud-部署) |
+| Web 控制台 | https://agentic-rubric-runner-ajswk9uybbsa6cfasiudrx.streamlit.app/ |
 
 ---
 
@@ -211,6 +211,8 @@ agentic-rubric run ... --model deepseek-chat
 
 ## Web 控制台
 
+**在线地址：** https://agentic-rubric-runner-ajswk9uybbsa6cfasiudrx.streamlit.app/
+
 **Document Evaluation Console** 提供与 CLI 相同的后端能力，面向非命令行用户：
 
 1. 上传 `query.txt`、PDF 附件、`rubrics.json`
@@ -220,9 +222,11 @@ agentic-rubric run ... --model deepseek-chat
 
 本地启动：`agentic-rubric ui` 或 `streamlit run app.py`
 
-### Streamlit Cloud 部署
+### Streamlit Cloud 部署（维护参考）
 
-> 若访问链接提示 “You do not have access” 或返回 404，说明应用尚未在 Streamlit Cloud 创建，或可见性未设为 Public。URL 需在部署成功后从控制台复制。
+当前已部署于上述地址。若需重新部署或 fork 后自建，可按以下步骤操作：
+
+> 依赖文件为根目录 `requirements.txt`（非 `requirements-web.txt`）。公开 Demo 建议在页面输入 API Key，Secrets 可留空。
 
 1. 登录 [share.streamlit.io](https://share.streamlit.io/)（GitHub 账号，需有仓库权限）
 2. **Create app**，填写：

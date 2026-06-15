@@ -11,6 +11,5 @@ python_version = "3.11"
 # Secrets：公开 Demo 留空（用户在页面输入 API Key）
 # Advanced > Secrets: 不填 DEEPSEEK_API_KEY
 
-# 部署后 App URL 由 Streamlit 分配，例如：
-# https://agentic-rubric-runner.streamlit.app/
-# 若该子域名已被占用，会生成类似 https://xxx.streamlit.app/
+# 部署后 App URL（当前生产环境）：
+app_url = "https://agentic-rubric-runner-ajswk9uybbsa6cfasiudrx.streamlit.app/"
