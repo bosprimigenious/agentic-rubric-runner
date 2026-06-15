@@ -10,6 +10,10 @@ from pathlib import Path
 import streamlit as st
 from openai import OpenAI
 
+from aarrr_agent.env import load_project_env
+
+load_project_env()
+
 from aarrr_agent.errors import PipelineError
 from aarrr_agent.pipeline import resolve_output_paths, run_pipeline
 
@@ -34,8 +38,8 @@ with st.sidebar:
     st.divider()
     st.markdown("**评分公式**")
     st.code(
-        "final = (hard+soft+opt) / (H_max+S_max+O_max) × 100\n"
-        "分母从 rubrics.json 动态计算",
+        "final = (hard/hard_max)×50 + (soft/soft_max)×30 + (opt/opt_max)×20\n"
+        "hard_max / soft_max / opt_max 从 rubrics.json 动态计算",
         language="text",
     )
 
