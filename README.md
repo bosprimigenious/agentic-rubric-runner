@@ -213,7 +213,7 @@ streamlit run app.py
 | `validate` | 校验 `grading_result.json` 结构与分数一致性 |
 | `inspect-trace` | 格式化查看 `agent_trace.jsonl` |
 | `init` | 在当前目录生成任务模板（query / rubrics 骨架） |
-| `ui` | 启动 Streamlit Document Evaluation Console |
+| `ui` | 启动 Streamlit 文档评审控制台 |
 
 **常用选项**
 
@@ -235,20 +235,20 @@ agentic-rubric run ... --model deepseek-chat
 
 ## Web 控制台
 
-**在线地址：** https://agentic-rubric-runner.streamlit.app/
+**在线体验：** [agentic-rubric-runner.streamlit.app](https://agentic-rubric-runner.streamlit.app/)
 
-**Document Evaluation Console** 提供与 CLI 相同的后端能力，面向非命令行用户：
+**文档评审控制台** 提供与 CLI 相同的后端能力：
 
 1. 上传 `query.txt`、PDF 附件、`rubrics.json`
-2. 在页面输入 DeepSeek API Key（公开 Demo 不在服务端存储密钥）
-3. 分步运行 Phase 1（生成报告）与 Phase 2（Rubric 评分）
-4. 在线预览评分摘要，下载 PDF / JSON / trace
+2. 在页面输入 DeepSeek API Key（公开 Demo，密钥仅存于当前会话）
+3. 运行 Phase 1（报告生成）与 Phase 2（Rubric 评分）
+4. 查看评分摘要，下载 PDF / JSON / 审计轨迹（下载不触发重新运行）
 
 本地启动：`agentic-rubric ui` 或 `streamlit run app.py`
 
 ### Streamlit Cloud 部署与排错
 
-**当前在线地址：** https://agentic-rubric-runner.streamlit.app/
+应用地址：[https://agentic-rubric-runner.streamlit.app/](https://agentic-rubric-runner.streamlit.app/)
 
 应用已创建后，若页面**空白 / 只有灰色背景 / 看不见内容**，按下面顺序排查（多数情况是云端配置未更新，而非代码未部署）：
 

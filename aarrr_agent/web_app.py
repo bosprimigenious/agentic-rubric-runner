@@ -69,7 +69,7 @@ def _render_header(st) -> None:
         st.caption("上传任务材料，运行受控评审流水线，导出可审计结果。")
     with top_right:
         st.markdown("<div style='padding-top:0.5rem'></div>", unsafe_allow_html=True)
-        st.info("公开演示", icon="🌐")
+        st.caption("公开演示")
 
 
 def _parse_trace_bytes(trace_bytes: bytes) -> list[dict[str, Any]]:
