@@ -110,6 +110,15 @@ main {
   box-shadow: var(--shadow);
 }
 
+.highlight {
+  border-color: #93c5fd;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.highlight h2 {
+  color: #1e40af;
+}
+
 .card h2 {
   margin-top: 0;
   font-size: 1.25rem;

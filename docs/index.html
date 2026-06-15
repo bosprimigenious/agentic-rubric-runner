@@ -15,7 +15,7 @@
       <p class="subtitle">Auditable Function-Calling Agent Workflow for PDF Generation and Rubric Evaluation</p>
       <div class="hero-actions">
         <a class="btn primary" href="https://github.com/bosprimigenious/agentic-rubric-runner" target="_blank" rel="noopener">GitHub 仓库</a>
-        <a class="btn secondary" href="https://your-streamlit-demo-url" target="_blank" rel="noopener">Streamlit Demo</a>
+        <a class="btn secondary" href="https://agentic-rubric-runner.streamlit.app/" target="_blank" rel="noopener">Streamlit Demo</a>
       </div>
     </div>
   </header>
@@ -31,14 +31,36 @@
       <p>适用于尽职调查审核、合规检查、提案评审等「参考文档 + 评分标准 → 生成产物并打分」场景。</p>
     </section>
 
+    <section class="card highlight">
+      <h2>推荐安装（从 GitHub）</h2>
+      <pre><code>pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+
+export DEEPSEEK_API_KEY="sk-your-key"
+agentic-rubric --help
+agentic-rubric ui</code></pre>
+      <p class="muted">带 <code>[web]</code> 会一并安装 Streamlit，否则 <code>agentic-rubric ui</code> 可能报错。</p>
+    </section>
+
     <section class="grid two-col">
       <div class="card">
-        <h2>CLI 安装</h2>
+        <h2>pipx 全局安装</h2>
+        <pre><code>pip install pipx &amp;&amp; pipx ensurepath
+
+pipx install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"</code></pre>
+      </div>
+      <div class="card">
+        <h2>安装指定版本</h2>
+        <pre><code>pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git@v0.4.0a1"</code></pre>
+      </div>
+    </section>
+
+    <section class="grid two-col">
+      <div class="card">
+        <h2>开发安装</h2>
         <pre><code>git clone https://github.com/bosprimigenious/agentic-rubric-runner.git
 cd agentic-rubric-runner
 pip install -e ".[dev,web]"
-cp .env.example .env   # 填入 DEEPSEEK_API_KEY
-agentic-rubric --help</code></pre>
+cp .env.example .env</code></pre>
       </div>
       <div class="card">
         <h2>CLI 运行示例</h2>
@@ -67,7 +89,7 @@ agentic-rubric run \
       <pre><code>streamlit run app.py
 # 或
 agentic-rubric ui</code></pre>
-      <p>在线 Demo：<a href="https://your-streamlit-demo-url" target="_blank" rel="noopener">Streamlit Cloud</a>（部署后替换此链接）</p>
+      <p>在线 Demo：<a href="https://agentic-rubric-runner.streamlit.app/" target="_blank" rel="noopener">agentic-rubric-runner.streamlit.app</a>（公开访问，需自备 DeepSeek API Key）</p>
     </section>
 
     <section class="grid two-col">

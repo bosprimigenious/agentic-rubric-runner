@@ -11,7 +11,7 @@
 **在线资源：**
 
 - 项目展示页（GitHub Pages）：https://bosprimigenious.github.io/agentic-rubric-runner/
-- Streamlit 在线 Demo：https://your-streamlit-demo-url（部署后替换）
+- Streamlit 在线 Demo：https://agentic-rubric-runner.streamlit.app/
 
 ---
 
@@ -77,9 +77,47 @@ flowchart LR
 
 ---
 
-## 快速开始
+## 安装
 
-### 1. 安装
+早期项目**推荐直接从 GitHub 安装**，无需等待 PyPI 发布，体验与 `pip install` 标准包一致。
+
+> **`[web]` 很重要**：它会一并安装 Streamlit。若省略，`agentic-rubric` CLI 可用，但 `agentic-rubric ui` 可能因缺少 `streamlit` 报错。
+
+### 方式一：从 GitHub 在线安装（推荐）
+
+```bash
+pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+```
+
+安装后验证：
+
+```bash
+agentic-rubric --help
+agentic-rubric run --help
+agentic-rubric ui --help
+```
+
+### 方式二：pipx 全局安装（推荐给终端用户）
+
+像 `npm install -g` 一样，任意目录都能直接运行 `agentic-rubric`：
+
+```bash
+pip install pipx
+pipx ensurepath
+
+pipx install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+```
+
+之后全局可用：
+
+```bash
+agentic-rubric --help
+agentic-rubric ui
+```
+
+### 方式三：开发安装
+
+适合改代码、跑测试、贡献 PR：
 
 ```bash
 git clone https://github.com/bosprimigenious/agentic-rubric-runner.git
@@ -91,7 +129,41 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[dev,web]"
 ```
 
-### 2. 配置 API Key
+### 只要 CLI，不要 Web
+
+```bash
+pip install "git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+```
+
+### 安装指定版本（tag）
+
+打 tag 后，可安装固定版本（比直接装 `main` 更稳定）：
+
+```bash
+# 维护者发布
+git tag v0.4.0a1
+git push origin v0.4.0a1
+
+# 用户安装
+pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git@v0.4.0a1"
+```
+
+### 更新安装
+
+```bash
+# pip
+pip install --upgrade --force-reinstall \
+  "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+
+# pipx
+pipx reinstall agentic-rubric-runner
+```
+
+---
+
+## 快速开始
+
+### 1. 配置 API Key
 
 复制环境变量模板并填入密钥：
 
@@ -107,22 +179,49 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
 ```
 
-CLI 与 Streamlit 启动时会自动加载项目根目录下的 `.env`（不会覆盖已设置的环境变量）。
-
-### 3. 运行示例任务
-
-仓库自带一套 AARRR 增长指标方案样例（`fixtures/`）：
+CLI 与 Streamlit 启动时会自动加载项目根目录下的 `.env`（不会覆盖已设置的环境变量）。  
+若未使用 `.env`，也可直接导出环境变量：
 
 ```bash
+export DEEPSEEK_API_KEY="sk-your-key-here"
+```
+
+Windows PowerShell：
+
+```powershell
+$env:DEEPSEEK_API_KEY="sk-your-key-here"
+```
+
+### 2. 运行示例任务
+
+**Linux / macOS：**
+
+```bash
+# 克隆仓库获取 fixtures 样例（若已通过 pip 安装，可先 git clone 仅用于样例文件）
 agentic-rubric run \
   --query fixtures/query.txt \
   --pdf fixtures/attachment.pdf \
   --rubrics fixtures/rubrics.json
+
+agentic-rubric ui
 ```
+
+**Windows PowerShell：**
+
+```powershell
+agentic-rubric run `
+  --query fixtures/query.txt `
+  --pdf fixtures/attachment.pdf `
+  --rubrics fixtures/rubrics.json
+
+agentic-rubric ui
+```
+
+> 样例文件位于仓库 `fixtures/` 目录。若仅通过 pip 安装、未克隆仓库，请自备 `query.txt`、`attachment.pdf`、`rubrics.json`，或先 `git clone` 获取样例。
 
 未指定 `--out` 时，结果写入 `outputs/<run_id>/`，避免覆盖历史运行记录。
 
-### 4. 查看结果
+### 3. 查看结果
 
 ```bash
 agentic-rubric validate outputs/<run_id>/grading_result.json
@@ -230,31 +329,78 @@ python solution.py \
 
 ### Web UI
 
+本项目提供 Streamlit Web UI。**公开 Demo 不内置 API Key**，用户需在页面中输入自己的 DeepSeek API Key。
+
 ```bash
-pip install -e ".[web]"
-streamlit run app.py
-# 或
+pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
 agentic-rubric ui
 ```
 
-在侧边栏配置 API Key 与模型，上传三个输入文件后点击 **Run Pipeline**。
+等价于 `streamlit run app.py`。
 
-**执行流程（方案 B — 分步）：**
+在侧边栏输入 API Key 与模型，上传三个输入文件后点击 **Run Pipeline**。输入的 Key 仅用于本次运行，不会写入仓库或保存到服务器。
+
+**在线 Demo：** https://agentic-rubric-runner.streamlit.app/
+
+**执行流程（分步）：**
 
 1. **Phase 1** — 调用 `run_phase1_pipeline()`，生成 PDF / Markdown / trace，可立即下载
 2. **Phase 2** — 调用 `run_phase2_pipeline()`，输出评分 JSON；若本阶段失败，Phase 1 产物仍可下载
 
 Web 层直接调用 `aarrr_agent.pipeline` 中的分步函数，不通过子进程调用脚本，也不在日志中输出 API Key。
 
-#### Streamlit Cloud 部署
+#### 部署到 Streamlit Cloud
 
-1. 在 [Streamlit Cloud](https://streamlit.io/cloud) 连接 GitHub 仓库 `bosprimigenious/agentic-rubric-runner`
-2. **Main file** 选择 `app.py`
-3. **Dependencies** 使用 `requirements-web.txt`（或 `pyproject.toml` 的 `[web]` extra）
-4. 在 **Secrets** 中设置：
-   - `DEEPSEEK_API_KEY`
-   - `DEEPSEEK_BASE_URL`（可选，默认 `https://api.deepseek.com`）
-5. 点击 **Deploy**
+采用**方式 A（公开 Demo）**：不在 Streamlit Secrets 中配置 API Key，由访问者自行输入。
+
+**Step 1 — 登录**  
+打开 [Streamlit Community Cloud](https://share.streamlit.io/)，使用 GitHub 账号登录。
+
+**Step 2 — Create app**  
+点击 **Create app**，按提示填写：
+
+| 字段 | 值 |
+|------|-----|
+| Repository | `bosprimigenious/agentic-rubric-runner` |
+| Branch | `main` |
+| Main file path | `app.py` |
+
+**Step 3 — Advanced settings（可选）**  
+公开 Demo **Secrets 留空**，不要填写 `DEEPSEEK_API_KEY`。
+
+**Step 4 — Deploy**  
+点击 **Deploy**，等待构建完成。成功后访问：
+
+```
+https://agentic-rubric-runner.streamlit.app/
+```
+
+**仓库部署所需文件：**
+
+```
+app.py
+requirements.txt      # 含 streamlit 等全部 Python 依赖
+packages.txt          # fonts-noto-cjk（云端 PDF 中文字体）
+aarrr_agent/
+```
+
+**部署后检查清单：**
+
+1. 页面能打开
+2. 上传 `query.txt` / `attachment.pdf` / `rubrics.json` 正常
+3. 输入 API Key 后 **Run Pipeline** 可点击
+4. Phase 1 生成 PDF 与 trace
+5. Phase 2 输出评分
+6. 可下载 `phase1_output.pdf`、`grading_result.json`、`agent_trace.jsonl`
+
+**常见报错：**
+
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| `ModuleNotFoundError` | 依赖缺失 | 确认 `requirements.txt` 含 `streamlit`、`openai`、`pymupdf` 等 |
+| 中文字体 E006 | 云端无中文字体 | 确认根目录有 `packages.txt`，内容为 `fonts-noto-cjk` |
+| API Key 无效 | 未输入或 Key 错误 | 在页面侧边栏手动输入有效 Key |
+| GitHub Pages 打不开 Streamlit | Pages 仅静态站 | 用 Streamlit Cloud 跑 Web UI，Pages 只做介绍页 |
 
 上传文件仅写入临时目录，不会提交到仓库。
 
@@ -474,9 +620,11 @@ agentic-rubric-runner/
 ├── fixtures/             # 样例输入（query / pdf / rubrics）
 ├── docs/                 # GitHub Pages 静态展示页
 ├── tests/                # pytest 单元测试
+├── packages.txt          # Streamlit Cloud 系统字体（fonts-noto-cjk）
 ├── .github/workflows/    # CI 与 PyPI 发布
 ├── pyproject.toml
-└── requirements.txt
+├── requirements.txt      # Streamlit Cloud Python 依赖
+└── requirements-web.txt
 ```
 
 ### 运行测试
@@ -526,13 +674,17 @@ git push origin v0.4.0a1
 ## 安全说明
 
 - **不要**将 `.env` 或真实 API Key 提交到 Git 仓库
-- Streamlit Cloud 通过 Secrets 注入 Key，不要在 `app.py` 中硬编码
+- **Streamlit 公开 Demo** 采用用户自带 Key（方式 A），不在 Secrets 中配置 `DEEPSEEK_API_KEY`
+- 本地 CLI 可使用 `.env`；Web UI 页面不读取环境变量中的 Key，避免云端误用维护者 Key
 - `fixtures/attachment.pdf` 为示例材料；生产环境请替换为你有权使用的文档
 - GitHub Pages 为纯静态页面，不执行 Python、不存储密钥
 
 ---
 
 ## 常见问题
+
+**Q: `agentic-rubric ui` 报找不到 streamlit？**  
+安装时需带 `[web]` extra：`pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"`
 
 **Q: 为什么同时有 `.md` 和 `.pdf`？**  
 Markdown 保留完整结构与表格，供 Phase 2 精确评分；PDF 是最终交付格式。

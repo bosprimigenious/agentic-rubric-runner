@@ -1,19 +1,14 @@
-"""Streamlit 可视化界面 — Phase 1 / Phase 2 分步执行。"""
+"""Streamlit 可视化界面 — Phase 1 / Phase 2 分步执行（公开 Demo 安全模式）。"""
 
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 import time
 from pathlib import Path
 
 import streamlit as st
 from openai import OpenAI
-
-from aarrr_agent.env import load_project_env
-
-load_project_env()
 
 from aarrr_agent.errors import PipelineError
 from aarrr_agent.pipeline import resolve_output_paths, run_phase1_pipeline, run_phase2_pipeline
@@ -26,17 +21,31 @@ st.set_page_config(
 
 st.title("📋 Agentic Document Evaluator")
 st.caption("输入文档 + 评分标准 → Agent 生成报告 → 自动评分 → 输出结果")
+st.info("公开 Demo：请使用你自己的 DeepSeek API Key。Key 仅用于本次运行，不会写入仓库或保存到服务器。")
 
 with st.sidebar:
     st.header("⚙️ 配置")
+
     api_key = st.text_input(
         "DeepSeek API Key",
         type="password",
-        value=os.getenv("DEEPSEEK_API_KEY", ""),
-        help="不会写入日志或仓库",
+        placeholder="请输入你自己的 DeepSeek API Key",
+        help="Key 仅用于本次运行，不会写入日志、仓库或服务器文件。",
     )
-    base_url = st.text_input("API Base URL", value=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
-    model = st.selectbox("模型", ["deepseek-chat", "deepseek-reasoner"])
+
+    base_url = st.text_input(
+        "API Base URL",
+        value="https://api.deepseek.com",
+    )
+
+    model = st.selectbox(
+        "模型",
+        ["deepseek-chat", "deepseek-reasoner"],
+        index=0,
+    )
+
+    st.caption("公开 Demo 模式：请使用你自己的 API Key。")
+
     st.divider()
     st.markdown("**评分公式**")
     st.code(
@@ -52,6 +61,9 @@ with col2:
     pdf_file = st.file_uploader("📎 附件 PDF", type=["pdf"])
 with col3:
     rubrics_file = st.file_uploader("📊 Rubrics JSON", type=["json"])
+
+if query_file and pdf_file and rubrics_file and not api_key:
+    st.warning("请先输入 DeepSeek API Key。")
 
 ready = all([query_file, pdf_file, rubrics_file, api_key])
 run_btn = st.button("▶ Run Pipeline", type="primary", disabled=not ready)
