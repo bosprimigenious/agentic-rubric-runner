@@ -1,0 +1,16 @@
+# Streamlit Community Cloud 部署清单
+# https://share.streamlit.io/
+
+[deploy]
+# 在控制台填写（此文件仅作文档，Streamlit 不自动读取）
+repository = "bosprimigenious/agentic-rubric-runner"
+branch = "main"
+main_file = "app.py"
+python_version = "3.11"
+
+# Secrets：公开 Demo 留空（用户在页面输入 API Key）
+# Advanced > Secrets: 不填 DEEPSEEK_API_KEY
+
+# 部署后 App URL 由 Streamlit 分配，例如：
+# https://agentic-rubric-runner.streamlit.app/
+# 若该子域名已被占用，会生成类似 https://xxx.streamlit.app/

@@ -7,7 +7,7 @@
 | 资源 | 链接 |
 |------|------|
 | 展示页 | https://bosprimigenious.github.io/agentic-rubric-runner/ |
-| Web 控制台 | https://agentic-rubric-runner.streamlit.app/ |
+| Web 控制台 | 见下方 [Streamlit Cloud 部署](#streamlit-cloud-部署)（需先在 share.streamlit.io 创建应用） |
 | 源码 | https://github.com/bosprimigenious/agentic-rubric-runner |
 
 ---
@@ -102,9 +102,38 @@ PowerShell 设置 Key：`$env:DEEPSEEK_API_KEY="sk-..."`
 ## Web 控制台
 
 - 页面：**Document Evaluation Console**
-- 公开 Demo：**用户自备 API Key**，不读取环境变量 / Secrets
-- 部署：[Streamlit Cloud](https://share.streamlit.io/) → `app.py` + `requirements.txt` + `packages.txt`
-- 本地：`agentic-rubric ui` 或 `streamlit run app.py`
+- 公开 Demo：**用户自备 API Key**（Secrets 留空）
+- 后端：Streamlit Cloud 从 GitHub `main` 拉取代码 → `app.py` → `aarrr_agent/web_app.py` → `pipeline`
+
+### Streamlit Cloud 部署（必须手动完成一次）
+
+> **若打开链接提示 “You do not have access” 或 404**：说明应用**尚未部署**，或 URL 写错了。Streamlit 地址要在部署成功后才会生成。
+
+1. 打开 https://share.streamlit.io/ ，用 **GitHub 登录**（需有 `bosprimigenious/agentic-rubric-runner` 权限）
+2. 点击 **Create app**
+3. 填写：
+
+| 字段 | 值 |
+|------|-----|
+| Repository | `bosprimigenious/agentic-rubric-runner` |
+| Branch | `main` |
+| Main file path | `app.py` |
+
+4. **Advanced settings → Secrets**：**留空**（公开 Demo 不在云端存 Key）
+5. 点击 **Deploy**，等待构建完成（约 2–5 分钟）
+6. 复制控制台给出的真实 URL（可能是 `https://agentic-rubric-runner.streamlit.app/`，也可能带随机后缀）
+
+**构建依赖文件：** `requirements.txt` · `packages.txt` · `aarrr_agent/` · `.streamlit/config.toml`
+
+**常见构建失败：**
+
+| 现象 | 处理 |
+|------|------|
+| `ModuleNotFoundError: aarrr_agent` | 确认 `main` 分支含 `aarrr_agent/` 且 `app.py` 在仓库根目录 |
+| 中文字体 E006 | 确认根目录有 `packages.txt`，内容为 `fonts-noto-cjk` |
+| 需要登录才能访问 | 在 Streamlit 应用设置中将 Visibility 改为 **Public** |
+
+本地调试：`streamlit run app.py` 或 `agentic-rubric ui`
 
 ---
 

@@ -1,4 +1,4 @@
-# Streamlit Cloud 与 pip 安装共用（与 pyproject.toml 同步）
+# Streamlit Cloud：从 GitHub 克隆后安装（不依赖 -e，app.py 会注入 sys.path）
 openai>=1.30.0
 pymupdf>=1.24.0
 reportlab>=4.0.0
