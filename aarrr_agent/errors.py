@@ -6,6 +6,7 @@ E003 — Agent 未调用必要工具
 E004 — 报告内容不完整（警告，非致命）
 E005 — Grading JSON 校验失败
 E006 — 中文字体未找到
+E007 — 附件与任务领域不匹配（离题 PDF）
 """
 
 from __future__ import annotations

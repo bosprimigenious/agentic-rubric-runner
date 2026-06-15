@@ -6,6 +6,31 @@ on:
   pull_request:
 
 jobs:
+  cli-only:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install CLI only (no [web])
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: CLI smoke (core commands)
+        run: |
+          agentic-rubric --help
+          agentic-rubric run --help
+          agentic-rubric phase1 --help
+          agentic-rubric grade --help
+          agentic-rubric validate --help
+          agentic-rubric inspect-trace --help
+          agentic-rubric init --help
+
   test-build:
     runs-on: ubuntu-latest
 
@@ -27,7 +52,7 @@ jobs:
       - name: Pytest
         run: pytest -q
 
-      - name: CLI help
+      - name: CLI help (with web extra)
         run: |
           agentic-rubric --help
           agentic-rubric run --help

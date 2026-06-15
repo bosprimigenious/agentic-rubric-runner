@@ -1,0 +1,224 @@
+@page {
+  size: A4;
+  margin: 18mm 16mm 20mm 16mm;
+  @bottom-left {
+    content: "文档评审控制台";
+    color: #64748b;
+    font-size: 9px;
+  }
+  @bottom-right {
+    content: "第 " counter(page) " 页";
+    color: #64748b;
+    font-size: 9px;
+  }
+}
+
+@page :first {
+  margin-top: 22mm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: #1e293b;
+  margin: 0;
+  padding: 0;
+}
+
+.cover {
+  min-height: 240mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  page-break-after: always;
+}
+
+.cover .eyebrow {
+  font-size: 10pt;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #2563eb;
+  margin-bottom: 12px;
+}
+
+.cover h1 {
+  font-size: 26pt;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 12px 0;
+  line-height: 1.25;
+}
+
+.cover .subtitle {
+  font-size: 12pt;
+  color: #64748b;
+  margin: 0 0 32px 0;
+}
+
+.cover .meta {
+  font-size: 9pt;
+  color: #94a3b8;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section {
+  margin-bottom: 20px;
+}
+
+.section.page-break {
+  page-break-before: always;
+}
+
+h2 {
+  font-size: 15pt;
+  color: #1e3a5f;
+  border-bottom: 2px solid #2563eb;
+  padding-bottom: 6px;
+  margin: 0 0 14px 0;
+}
+
+h3 {
+  font-size: 11pt;
+  color: #1e40af;
+  margin: 14px 0 8px 0;
+}
+
+p {
+  margin: 0 0 8px 0;
+  text-align: justify;
+}
+
+ul, ol {
+  margin: 0 0 10px 0;
+  padding-left: 20px;
+}
+
+blockquote.quote {
+  border-left: 3px solid #2563eb;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metric-card {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+  break-inside: avoid;
+}
+
+.metric-card.primary {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  border-left: 4px solid #1e40af;
+}
+
+.metric-card span {
+  display: block;
+  font-size: 8.5pt;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.metric-card strong {
+  font-size: 13pt;
+  color: #0f172a;
+}
+
+.bullet-list li {
+  margin-bottom: 4px;
+}
+
+.aarrr-flow {
+  display: flex;
+  gap: 6px;
+  margin: 16px 0;
+  break-inside: avoid;
+}
+
+.aarrr-stage {
+  flex: 1;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 10px 8px;
+  background: #fff;
+  text-align: center;
+}
+
+.aarrr-stage .name {
+  font-weight: 700;
+  color: #1e40af;
+  font-size: 11pt;
+  margin-bottom: 6px;
+}
+
+.aarrr-stage .metric {
+  font-size: 8.5pt;
+  color: #334155;
+  margin-bottom: 4px;
+}
+
+.aarrr-stage .diag {
+  font-size: 7.5pt;
+  color: #64748b;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 16px 0;
+  font-size: 9pt;
+}
+
+thead {
+  display: table-header-group;
+}
+
+th {
+  background: #1e40af;
+  color: #fff;
+  padding: 8px;
+  text-align: left;
+  font-weight: 600;
+}
+
+td {
+  border: 1px solid #cbd5e1;
+  padding: 7px 8px;
+  vertical-align: top;
+}
+
+tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.warn-green { background: #ecfdf5 !important; }
+.warn-yellow { background: #fffbeb !important; }
+.warn-red { background: #fef2f2 !important; }
+
+.appendix {
+  font-size: 9pt;
+  color: #64748b;
+}
+
+code {
+  font-family: Consolas, monospace;
+  font-size: 9pt;
+  color: #0f766e;
+}

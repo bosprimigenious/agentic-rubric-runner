@@ -1,2 +1,3 @@
-# 与 requirements.txt 相同（兼容 Streamlit Cloud 里误填 requirements-web.txt 的配置）
+# 本地 Web UI：核心依赖 + Streamlit
 -r requirements.txt
+streamlit>=1.40.0,<1.60.0

@@ -13,6 +13,7 @@ from openai import OpenAI
 
 from aarrr_agent.agent import run_phase1_agent
 from aarrr_agent.grader import run_phase2_grader
+from aarrr_agent.grading_report import render_grading_report_html, render_grading_report_md
 from aarrr_agent.schemas import GradingResult
 from aarrr_agent.tools import save_trace
 
@@ -25,7 +26,11 @@ class OutputPaths:
     run_id: str
     phase1_pdf: Path
     phase1_md: Path
+    phase1_html: Path
+    evidence_pack: Path
     grading_json: Path
+    grading_report_md: Path
+    grading_report_html: Path
     trace_jsonl: Path
     run_meta: Path
     emergency_trace: Path
@@ -59,7 +64,11 @@ def resolve_output_paths(out: Path | None = None, run_id: str | None = None) -> 
         run_id=rid,
         phase1_pdf=base / "phase1_output.pdf",
         phase1_md=base / "phase1_output.md",
+        phase1_html=base / "phase1_output.html",
+        evidence_pack=base / "evidence_pack.json",
         grading_json=base / "grading_result.json",
+        grading_report_md=base / "grading_report.md",
+        grading_report_html=base / "grading_report.html",
         trace_jsonl=base / "agent_trace.jsonl",
         run_meta=base / "run_meta.json",
         emergency_trace=base / "agent_trace_emergency.jsonl",
@@ -91,13 +100,17 @@ def write_run_meta(
         },
         "outputs": {
             "pdf": str(paths.phase1_pdf.name),
+            "html": str(paths.phase1_html.name),
             "markdown": str(paths.phase1_md.name),
+            "evidence_pack": str(paths.evidence_pack.name),
             "trace": str(paths.trace_jsonl.name),
         },
     }
     if rubrics is not None and rubrics.exists():
         meta["input_hash"]["rubrics"] = sha256_file(rubrics)
         meta["outputs"]["grading"] = str(paths.grading_json.name)
+        meta["outputs"]["grading_report_md"] = str(paths.grading_report_md.name)
+        meta["outputs"]["grading_report_html"] = str(paths.grading_report_html.name)
 
     paths.run_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -160,6 +173,14 @@ def run_phase2_pipeline(
     )
     paths.grading_json.write_text(
         json.dumps(result.model_dump(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    paths.grading_report_md.write_text(
+        render_grading_report_md(result, str(rubrics)),
+        encoding="utf-8",
+    )
+    paths.grading_report_html.write_text(
+        render_grading_report_html(result, str(rubrics)),
         encoding="utf-8",
     )
     write_run_meta(

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{ report.title }}</title>
+  <style>{{ css }}</style>
+</head>
+<body>
+  <section class="cover">
+    <div class="eyebrow">AARRR Growth Metrics Report</div>
+    <h1>{{ report.title }}</h1>
+    <p class="subtitle">{{ report.subtitle }}</p>
+    <div class="meta">
+      {% if report.generated_at %}<span>生成时间：{{ report.generated_at }}</span>{% endif %}
+      {% if report.run_id %}<span>Run ID：{{ report.run_id }}</span>{% endif %}
+      {% if report.model %}<span>模型：{{ report.model }}</span>{% endif %}
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>管理层摘要</h2>
+    {% if report.summary_cards %}
+    <div class="summary-grid">
+      {% for card in report.summary_cards %}
+      <div class="metric-card{% if loop.first %} primary{% endif %}">
+        <span>{{ card.label }}</span>
+        <strong>{{ card.value }}</strong>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if report.summary_bullets %}
+    <ul class="bullet-list">
+      {% for item in report.summary_bullets %}
+      <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  {% if report.north_star %}
+  <section class="section page-break">
+    <h2>北极星指标</h2>
+    <div class="metric-card primary" style="max-width: 70%;">
+      <span>North Star Metric</span>
+      <strong>{{ report.north_star }}</strong>
+    </div>
+    {% if report.north_star_reason %}
+    <p style="margin-top: 12px;">{{ report.north_star_reason }}</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="section{% if not report.north_star %} page-break{% endif %}">
+    <h2>AARRR 增长链路</h2>
+    <div class="aarrr-flow">
+      {% for stage in report.aarrr_stages %}
+      <div class="aarrr-stage">
+        <div class="name">{{ stage.name }}</div>
+        {% if stage.health_metric %}
+        <div class="metric">{{ stage.health_metric }}</div>
+        {% endif %}
+        {% if stage.diagnostic_metrics %}
+        <div class="diag">{{ stage.diagnostic_metrics | join(' · ') }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if report.warning_rows %}
+  <section class="section">
+    <h2>预警规则</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>指标</th>
+          <th>正常</th>
+          <th>黄色预警</th>
+          <th>红色预警</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.warning_rows %}
+        <tr>
+          <td>{{ row.metric }}</td>
+          <td class="warn-green">{{ row.green }}</td>
+          <td class="warn-yellow">{{ row.yellow }}</td>
+          <td class="warn-red">{{ row.red }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  {% for section in report.sections %}
+  <section class="section page-break">
+    <h2>{{ section.title }}</h2>
+    {{ section.body_html | safe }}
+  </section>
+  {% endfor %}
+
+  <section class="section page-break appendix">
+    <h2>附录</h2>
+    <p>本报告由文档评审控制台生成。Markdown 源文件、工具调用轨迹与 Rubric 评分结果请见同目录产物。</p>
+  </section>
+</body>
+</html>

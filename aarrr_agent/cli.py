@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -75,6 +76,7 @@ def _prepare_paths(
     if phase1_out:
         paths.phase1_pdf = phase1_out
         paths.phase1_md = phase1_out.with_suffix(".md")
+        paths.phase1_html = phase1_out.with_suffix(".html")
     if grading_out:
         paths.grading_json = grading_out
     if trace_out:
@@ -90,6 +92,7 @@ def _print_run_header(paths: OutputPaths) -> None:
 def _print_phase1_artifacts(paths: OutputPaths, turns: int) -> None:
     console.print(f"[green]✓[/green] Phase 1 完成（{turns} 步工具调用）")
     console.print(f"  MD    → {paths.phase1_md}")
+    console.print(f"  HTML  → {paths.phase1_html}")
     console.print(f"  PDF   → {paths.phase1_pdf}")
     console.print(f"  Trace → {paths.trace_jsonl}")
     console.print(f"  Meta  → {paths.run_meta}")
@@ -98,6 +101,8 @@ def _print_phase1_artifacts(paths: OutputPaths, turns: int) -> None:
 def _print_phase2_artifacts(paths: OutputPaths) -> None:
     console.print(f"[green]✓[/green] Phase 2 完成")
     console.print(f"  Grade → {paths.grading_json}")
+    console.print(f"  Report MD → {paths.grading_report_md}")
+    console.print(f"  Report HTML → {paths.grading_report_html}")
 
 
 def _handle_pipeline_error(exc: PipelineError) -> None:
@@ -113,8 +118,12 @@ def phase1(
     phase1_out: Path | None = typer.Option(None, "--phase1-out", help="覆盖 Phase 1 PDF 路径"),
     trace_out: Path | None = typer.Option(None, "--trace-out", help="覆盖 trace 路径"),
     model: str = typer.Option("deepseek-chat", "--model", envvar="DEEPSEEK_MODEL"),
+    renderer: str = typer.Option("auto", "--renderer", envvar="PDF_RENDERER", help="PDF 渲染器: auto|html|reportlab"),
 ) -> None:
     """只运行 Phase 1：Agent 生成报告与 PDF（不读取 rubrics.json）。"""
+    import os
+
+    os.environ["PDF_RENDERER"] = renderer
     paths = _prepare_paths(out, phase1_out=phase1_out, trace_out=trace_out)
     client = make_client()
 
@@ -149,8 +158,12 @@ def run(
     trace_out: Path | None = typer.Option(None, "--trace-out", help="覆盖 trace 路径"),
     model: str = typer.Option("deepseek-chat", "--model", envvar="DEEPSEEK_MODEL"),
     skip_phase2: bool = typer.Option(False, "--skip-phase2", help="仅运行 Phase 1"),
+    renderer: str = typer.Option("auto", "--renderer", envvar="PDF_RENDERER", help="PDF 渲染器: auto|html|reportlab"),
 ) -> None:
     """完整双阶段流水线：Agent 生成报告 + Rubric 自动评分。"""
+    import os
+
+    os.environ["PDF_RENDERER"] = renderer
     paths = _prepare_paths(out, phase1_out, grading_out, trace_out)
     client = make_client()
     t0 = time.perf_counter()
@@ -342,7 +355,15 @@ def resolve_web_app_path() -> Path:
 
 @app.command()
 def ui() -> None:
-    """启动 Streamlit Web 界面。"""
+    """启动 Streamlit Web 界面（需安装 [web] 额外依赖）。"""
+    if importlib.util.find_spec("streamlit") is None:
+        console.print("[red]未安装 Web 依赖，无法启动 Streamlit 控制台。[/red]")
+        console.print(
+            "请运行: pip install \"agentic-rubric-runner[web] "
+            "@ git+https://github.com/bosprimigenious/agentic-rubric-runner.git\""
+        )
+        console.print("或本地开发: pip install -e \".[web]\"")
+        raise typer.Exit(1)
     try:
         app_path = resolve_web_app_path()
     except FileNotFoundError as exc:

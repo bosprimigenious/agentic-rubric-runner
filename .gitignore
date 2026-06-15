@@ -13,6 +13,7 @@ build/
 agent_trace_emergency.jsonl
 phase1_output.pdf
 phase1_output.md
+phase1_output.html
 grading_result.json
 agent_trace.jsonl
 run_meta.json

@@ -6,11 +6,12 @@
 repository = "bosprimigenious/agentic-rubric-runner"
 branch = "main"
 main_file = "app.py"
-# 备选入口（requirements.txt 已安装 .[web] 时也可用）：
+# Advanced → Requirements file: requirements-streamlit.txt
+# 备选入口（需 requirements-web.txt / [web] extra）：
 # main_file = "aarrr_agent/web_app.py"
 python_version = "3.11"
 
-# Secrets：公开 Demo 留空（用户在页面输入 API Key）
+# Secrets：留空（用户在页面输入 API Key）
 # Advanced > Secrets: 不填 DEEPSEEK_API_KEY
 
 # 部署后 App URL（当前生产环境）：

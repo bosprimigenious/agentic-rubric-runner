@@ -30,3 +30,13 @@ def test_phase1_help():
     result = runner.invoke(app, ["phase1", "--help"])
     assert result.exit_code == 0
     assert "--query" in result.stdout
+
+
+def test_ui_exits_when_streamlit_missing():
+    from unittest.mock import patch
+
+    runner = CliRunner()
+    with patch("aarrr_agent.cli.importlib.util.find_spec", return_value=None):
+        result = runner.invoke(app, ["ui"])
+    assert result.exit_code == 1
+    assert "未安装 Web 依赖" in result.stdout

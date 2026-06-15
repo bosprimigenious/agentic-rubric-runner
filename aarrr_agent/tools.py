@@ -1,4 +1,4 @@
-"""Agent 工具：PDF/文本读取与报告写入。"""
+"""Agent 工具：PDF/文本读取、证据抽取与报告写入。"""
 
 from __future__ import annotations
 
@@ -14,20 +14,22 @@ import fitz
 
 from aarrr_agent.config import PROMPT_ATTACHMENT_BUDGET
 from aarrr_agent.errors import PipelineError
-from aarrr_agent.pdf_gen import markdown_to_pdf
-from aarrr_agent.validation import validate_report_content
+from aarrr_agent.evidence import extract_evidence_pack, format_evidence_for_prompt, load_evidence_pack, save_evidence_pack
+from aarrr_agent.html_pdf import render_markdown_report
+from aarrr_agent.phase1_state import Phase1StateMachine, WRITE_TOOLS
+from aarrr_agent.structured_report import StructuredReport, structured_to_executive_report, structured_to_markdown
+from aarrr_agent.html_report import render_executive_html
+from aarrr_agent.validation import self_check_report, validate_report_content
 
 TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
             "name": "read_text",
-            "description": "读取纯文本文件内容，用于读取 query.txt 等任务描述文件",
+            "description": "读取 query.txt 任务描述（必须第一步调用）",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "path": {"type": "string", "description": "文件路径"},
-                },
+                "properties": {"path": {"type": "string", "description": "文件路径"}},
                 "required": ["path"],
             },
         },
@@ -36,11 +38,26 @@ TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_pdf",
-            "description": "读取 PDF 文件的文本内容，用于读取学术附件",
+            "description": "读取附件 PDF 文本（必须在 read_text 之后调用）",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string", "description": "PDF 文件路径"}},
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "extract_evidence_pack",
+            "description": (
+                "从附件 PDF 抽取证据包 evidence_pack.json（必须在 read_pdf 之后、写报告之前调用）。"
+                "报告中的关键事实须引用证据编号，如 [E01]。"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "PDF 文件路径"},
+                    "path": {"type": "string", "description": "PDF 文件路径（附件）"},
                 },
                 "required": ["path"],
             },
@@ -49,25 +66,57 @@ TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "write_pdf_report",
+            "name": "self_check_report",
             "description": (
-                "将 Markdown 格式报告写入并渲染为 PDF，完成 Phase 1 产物。"
-                "传入完整报告内容与 PDF 输出路径。"
+                "对报告草稿做完整性自检（可选，建议在 write 之前调用）。"
+                "返回缺失章节与证据引用问题。"
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "content": {
-                        "type": "string",
+                    "content": {"type": "string", "description": "报告 Markdown 草稿"},
+                },
+                "required": ["content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_structured_report",
+            "description": (
+                "提交结构化报告 JSON 并渲染为 MD/HTML/PDF（推荐，必须最后调用之一）。"
+                "关键事实须在 evidence_refs 或正文中标注 [E01] 等证据编号。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "report": {
+                        "type": "object",
                         "description": (
-                            "完整的 Markdown 报告内容，必须包含所有必需章节，"
-                            "不得截断或省略任何章节"
+                            "结构化报告，含 title, executive_summary, north_star_metric, "
+                            "aarrr_stages, warning_rules, review_cadence, action_plan, evidence_refs"
                         ),
                     },
-                    "path": {
-                        "type": "string",
-                        "description": "PDF 输出路径，例如 phase1_output.pdf",
-                    },
+                    "path": {"type": "string", "description": "PDF 输出路径"},
+                },
+                "required": ["report", "path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_pdf_report",
+            "description": (
+                "将 Markdown 报告写入并渲染为 PDF（备选，必须最后调用之一）。"
+                "正文中须包含 [E01] 形式证据引用。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "完整 Markdown 报告"},
+                    "path": {"type": "string", "description": "PDF 输出路径"},
                 },
                 "required": ["content", "path"],
             },
@@ -78,20 +127,24 @@ TOOLS: list[dict[str, Any]] = [
 
 @dataclass
 class Phase1ToolContext:
-    """Phase 1 工具执行上下文：严格限制可读/可写路径。"""
+    """Phase 1 工具执行上下文：路径白名单 + 状态机。"""
 
     query_path: Path
     pdf_path: Path
     pdf_output_path: Path
+    state: Phase1StateMachine = field(default_factory=Phase1StateMachine)
+    evidence_path: Path = field(init=False)
     _allowed_reads: set[Path] = field(init=False, repr=False)
     _allowed_writes: set[Path] = field(init=False, repr=False)
+    _pdf_text_cache: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.query_path = Path(self.query_path).resolve()
         self.pdf_path = Path(self.pdf_path).resolve()
         self.pdf_output_path = Path(self.pdf_output_path).resolve()
+        self.evidence_path = self.pdf_output_path.parent / "evidence_pack.json"
         self._allowed_reads = {self.query_path, self.pdf_path}
-        self._allowed_writes = {self.pdf_output_path}
+        self._allowed_writes = {self.pdf_output_path, self.evidence_path}
 
     def assert_read_allowed(self, path: str) -> Path:
         resolved = Path(path).resolve()
@@ -104,30 +157,24 @@ class Phase1ToolContext:
 
     def assert_write_allowed(self, path: str) -> Path:
         resolved = Path(path).resolve()
-        if resolved not in self._allowed_writes:
+        if resolved not in self._allowed_writes and resolved != self.pdf_output_path.resolve():
             raise PermissionError(
                 f"Phase 1 不允许写入此路径: {path}。"
-                f"仅允许: {self.pdf_output_path}"
+                f"仅允许: {self.pdf_output_path} 或 {self.evidence_path}"
             )
         return resolved
 
 
 def read_text(path: str) -> str:
-    """读取 UTF-8 纯文本文件（无路径限制，供 Phase 2 使用）。"""
     return Path(path).read_text(encoding="utf-8")
 
 
 def read_text_phase1(path: str, ctx: Phase1ToolContext) -> str:
-    """Phase 1 专用：仅允许读取 query.txt。"""
     allowed = ctx.assert_read_allowed(path)
     return allowed.read_text(encoding="utf-8")
 
 
 def read_pdf(path: str) -> str:
-    """
-    抽取 PDF 全文，保留页码标记。
-    返回格式：每页用 [PAGE N] 分隔。
-    """
     doc = fitz.open(path)
     pages: list[str] = []
     try:
@@ -144,18 +191,115 @@ def read_pdf(path: str) -> str:
 
 
 def read_pdf_phase1(path: str, ctx: Phase1ToolContext) -> str:
-    """Phase 1 专用：仅允许读取附件 PDF。"""
     allowed = ctx.assert_read_allowed(path)
-    return read_pdf(str(allowed))
+    text = read_pdf(str(allowed))
+    ctx._pdf_text_cache = text
+    return text
+
+
+def run_extract_evidence_pack(pdf_path: str, ctx: Phase1ToolContext) -> str:
+    from aarrr_agent.attachment_relevance import assess_attachment_domain
+
+    allowed = ctx.assert_read_allowed(pdf_path)
+    pack = extract_evidence_pack(str(allowed))
+    assessment = assess_attachment_domain(
+        ctx._pdf_text_cache or "",
+        ctx.query_path.read_text(encoding="utf-8") if ctx.query_path.exists() else "",
+    )
+    save_evidence_pack(pack, ctx.evidence_path)
+    preview = format_evidence_for_prompt(pack)
+
+    if not assessment["relevant"]:
+        warning = (
+            f"[E007 警告] 附件与任务领域不匹配（领域词 {assessment['domain_hit_count']}，"
+            f"离题信号 {assessment['off_domain_hit_count']}）。"
+            "不得编造附件中不存在的社交电商/AARRR 事实；"
+            "禁止将 DNS/实验报告等内容强行类比为增长指标。"
+        )
+        return f"{warning}\n\n证据包已生成: {ctx.evidence_path}（共 {len(pack.facts)} 条）。\n\n{preview[:2000]}"
+
+    return (
+        f"证据包已生成: {ctx.evidence_path}（共 {len(pack.facts)} 条）。"
+        f"报告须引用证据编号 [E01] 等。\n\n{preview[:2000]}"
+    )
+
+
+def run_self_check_report(content: str) -> str:
+    result = self_check_report(content)
+    return json.dumps(result, ensure_ascii=False)
+
+
+def write_structured_report(report_data: dict[str, Any], pdf_path: str, ctx: Phase1ToolContext | None = None) -> str:
+    pdf = Path(pdf_path).resolve()
+    if ctx is not None:
+        pdf = ctx.assert_write_allowed(pdf_path)
+        from aarrr_agent.attachment_relevance import assess_attachment_domain
+
+        attachment_body = ctx._pdf_text_cache or ""
+        if attachment_body and not assess_attachment_domain(attachment_body)["relevant"]:
+            print(
+                f"[E007 警告] 附件领域不匹配，结构化报告可能无法通过 Rubric："
+                f"{assess_attachment_domain(attachment_body)['off_domain_hits'][:5]}"
+            )
+
+    report = StructuredReport.model_validate(report_data)
+    markdown = structured_to_markdown(report)
+    issues = validate_report_content(markdown)
+    if issues:
+        print(f"[E004 警告] 结构化报告可能不完整: {issues}")
+
+    pdf.parent.mkdir(parents=True, exist_ok=True)
+    md_path = pdf.with_suffix(".md")
+    md_path.write_text(markdown, encoding="utf-8")
+
+    run_id = pdf.parent.name if pdf.parent.name.startswith("20") else ""
+    exec_report = structured_to_executive_report(report, run_id=run_id)
+    html_path = pdf.with_suffix(".html")
+    html_path.write_text(render_executive_html(exec_report), encoding="utf-8")
+
+    from aarrr_agent.html_pdf import html_to_pdf, weasyprint_available
+
+    renderer = "html"
+    try:
+        if weasyprint_available():
+            html_to_pdf(html_path.read_text(encoding="utf-8"), pdf)
+        else:
+            from aarrr_agent.pdf_gen import markdown_to_pdf
+            markdown_to_pdf(markdown, str(pdf))
+            renderer = "reportlab"
+    except Exception:
+        from aarrr_agent.pdf_gen import markdown_to_pdf
+        markdown_to_pdf(markdown, str(pdf))
+        renderer = "reportlab"
+
+    structured_path = pdf.with_suffix(".structured.json")
+    structured_path.write_text(report.model_dump_json(indent=2, ensure_ascii=False), encoding="utf-8")
+
+    return (
+        f"结构化报告已生成: PDF={pdf}，HTML={html_path}，Markdown={md_path}，"
+        f"JSON={structured_path}（渲染器: {renderer}）"
+    )
 
 
 def write_pdf_report(content: str, pdf_path: str, ctx: Phase1ToolContext | None = None) -> str:
-    """
-    保存 Markdown 源文件并渲染 PDF。
-    同时产出 .md 与 .pdf，便于 Phase 2 优先读取结构化源内容。
-    """
     if ctx is not None:
         pdf = ctx.assert_write_allowed(pdf_path)
+        from aarrr_agent.attachment_relevance import assess_attachment_domain, detect_forced_analogy_report
+
+        attachment_body = ctx._pdf_text_cache or ""
+        if attachment_body:
+            assessment = assess_attachment_domain(attachment_body)
+            if not assessment["relevant"]:
+                if detect_forced_analogy_report(content, attachment_body):
+                    raise PipelineError(
+                        "E007",
+                        "报告将离题附件强行类比为增长指标（如 DNS→AARRR），拒绝写入。"
+                        "请使用与任务领域一致的附件。",
+                    )
+                print(
+                    f"[E007 警告] 附件领域不匹配，报告可能无法通过 Rubric 硬约束："
+                    f"{assessment['off_domain_hits'][:5]}"
+                )
     else:
         pdf = Path(pdf_path).resolve()
 
@@ -166,21 +310,19 @@ def write_pdf_report(content: str, pdf_path: str, ctx: Phase1ToolContext | None 
     pdf.parent.mkdir(parents=True, exist_ok=True)
     md_path = pdf.with_suffix(".md")
     md_path.write_text(content, encoding="utf-8")
-    markdown_to_pdf(content, str(pdf))
-    return f"PDF 报告已生成: {pdf}（Markdown 源文件: {md_path}）"
+
+    run_id = pdf.parent.name if pdf.parent.name.startswith("20") else ""
+    _, _, renderer_used = render_markdown_report(content, pdf, run_id=run_id)
+    return (
+        f"报告已生成: PDF={pdf}，Markdown={md_path}（渲染器: {renderer_used}）"
+    )
 
 
 def fit_text_to_budget(text: str, budget: int = PROMPT_ATTACHMENT_BUDGET) -> str:
-    """
-    将文本适配到 prompt 预算。
-    未超限时全文返回；超出时按 [PAGE N] 页边界截取，避免截断页内句子。
-    """
     if len(text) <= budget:
         return text
-
     pages = re.split(r"(?=\[PAGE \d+\])", text)
     pages = [p for p in pages if p.strip()]
-
     kept: list[str] = []
     total = 0
     for page in pages:
@@ -188,7 +330,6 @@ def fit_text_to_budget(text: str, budget: int = PROMPT_ATTACHMENT_BUDGET) -> str
             break
         kept.append(page)
         total += len(page)
-
     omitted = len(pages) - len(kept)
     note = f"\n\n[NOTE: 因上下文长度限制，已省略后续 {omitted} 页内容]"
     result = "".join(kept).strip()
@@ -198,11 +339,12 @@ def fit_text_to_budget(text: str, budget: int = PROMPT_ATTACHMENT_BUDGET) -> str
 
 
 def _sanitize_args_for_trace(tool_args: dict[str, Any]) -> dict[str, Any]:
-    """截断 trace 中的长字符串，避免 write_pdf_report.content 撑爆日志。"""
     preview: dict[str, Any] = {}
     for key, value in tool_args.items():
         if isinstance(value, str) and len(value) > 120:
             preview[key] = f"{value[:120]}...({len(value)} chars)"
+        elif key == "report" and isinstance(value, dict):
+            preview[key] = f"{{...}} ({len(json.dumps(value, ensure_ascii=False))} chars)"
         else:
             preview[key] = value
     return preview
@@ -214,7 +356,9 @@ def dispatch_tool(
     trace: list[dict[str, Any]],
     ctx: Phase1ToolContext | None = None,
 ) -> str:
-    """执行工具调用，记录到 trace，返回结果字符串。"""
+    if ctx is not None:
+        ctx.state.assert_tool_allowed(tool_name)
+
     step = len(trace) + 1
     t0 = time.perf_counter()
     entry: dict[str, Any] = {
@@ -224,28 +368,33 @@ def dispatch_tool(
         "status": "running",
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    if ctx is not None:
+        entry["phase1_state"] = ctx.state.state.value
     trace.append(entry)
 
     try:
         if tool_name == "read_text":
-            if ctx is None:
-                result = read_text(tool_args["path"])
-            else:
-                result = read_text_phase1(tool_args["path"], ctx)
+            result = read_text_phase1(tool_args["path"], ctx) if ctx else read_text(tool_args["path"])
         elif tool_name == "read_pdf":
+            result = read_pdf_phase1(tool_args["path"], ctx) if ctx else read_pdf(tool_args["path"])
+        elif tool_name == "extract_evidence_pack":
             if ctx is None:
-                result = read_pdf(tool_args["path"])
-            else:
-                result = read_pdf_phase1(tool_args["path"], ctx)
+                raise ValueError("extract_evidence_pack 需要 Phase 1 上下文")
+            result = run_extract_evidence_pack(tool_args["path"], ctx)
+        elif tool_name == "self_check_report":
+            result = run_self_check_report(tool_args["content"])
+        elif tool_name == "write_structured_report":
+            result = write_structured_report(tool_args["report"], tool_args["path"], ctx=ctx)
+            entry["path"] = tool_args["path"]
         elif tool_name == "write_pdf_report":
-            result = write_pdf_report(
-                tool_args["content"],
-                tool_args["path"],
-                ctx=ctx,
-            )
+            result = write_pdf_report(tool_args["content"], tool_args["path"], ctx=ctx)
             entry["path"] = tool_args["path"]
         else:
             raise ValueError(f"未知工具: {tool_name}")
+
+        if ctx is not None:
+            ctx.state.record_tool(tool_name)
+            entry["phase1_state"] = ctx.state.state.value
 
         entry["status"] = "ok"
         entry["duration_ms"] = int((time.perf_counter() - t0) * 1000)
@@ -260,7 +409,6 @@ def dispatch_tool(
 
 
 def save_trace(trace: list[dict[str, Any]], path: str) -> None:
-    """将 Agent 工具调用轨迹保存为 JSONL。"""
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8") as fh:

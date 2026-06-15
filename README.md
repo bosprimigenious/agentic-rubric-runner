@@ -15,17 +15,26 @@
 |------|------|
 | 展示页 | https://bosprimigenious.github.io/agentic-rubric-runner/ |
 | 源码 | https://github.com/bosprimigenious/agentic-rubric-runner |
-| Web 控制台 | https://agentic-rubric-runner.streamlit.app/ |
+| Web 控制台 | https://agentic-rubric-runner.streamlit.app/（可选演示层） |
+
+**产品入口**
+
+| 层级 | 入口 | 说明 |
+|------|------|------|
+| **Primary — CLI** | `agentic-rubric` | 核心产品：本地运行、批处理、可复现评审、CI 集成 |
+| **Optional — Web UI** | `agentic-rubric ui` / Streamlit | 可选演示层：在线体验与面试展示，需额外安装 `[web]` |
+
+CLI 是本项目的核心入口；Streamlit Web 控制台与 CLI 共用同一套 `pipeline` / `agent` / `grader` 后端，但不属于默认安装依赖。
 
 ---
 
 ## 功能概览
 
-- **Phase 1 — 报告生成**：Agent 通过 Function Calling 依次读取 `query.txt`、PDF 附件，生成 Markdown 报告并渲染为 PDF。
+- **Phase 1 — 报告生成**：Agent 通过 Function Calling 依次读取 `query.txt`、PDF 附件，生成 Markdown 报告；程序解析固定章节后套入管理层 HTML/CSS 模板，导出 PDF（WeasyPrint，失败回退 ReportLab），同时保留 `.md` / `.html` 供审计与预览。
 - **Phase 2 — Rubric 评分**：根据 `rubrics.json` 对 Phase 1 产物逐条打分，输出结构化 `grading_result.json`。
 - **可审计轨迹**：每一步 LLM 请求与工具调用写入 `agent_trace.jsonl`，支持事后回放与排错。
 - **程序重算分数**：`final_score` 由程序按权重公式计算，不直接信任模型给出的总分。
-- **双入口**：Typer CLI 与 Streamlit Web 控制台共用同一套 `pipeline` / `agent` / `grader` 后端。
+- **双入口**：Typer CLI（核心）与 Streamlit Web 控制台（可选）共用同一套 `pipeline` / `agent` / `grader` 后端。
 - **分步执行**：支持只跑 Phase 1、只跑 Phase 2，或在 Web 上分步触发。
 
 ---
@@ -45,14 +54,16 @@ flowchart TB
     subgraph core [核心层 aarrr_agent]
         PL["pipeline.py<br/>路径解析 · run_meta · 双阶段编排"]
 
-        subgraph phase1 [Phase 1 — agent.py]
+        subgraph phase1 [Phase 1 — agent.py + 状态机]
             direction LR
-            T1[read_text] --> T2[read_pdf] --> T3[write_pdf_report]
+            T1[read_text] --> T2[read_pdf] --> T3[extract_evidence_pack]
+            T3 --> T4[self_check_report]
+            T4 --> T5[write_structured_report]
         end
 
         subgraph phase2 [Phase 2 — grader.py]
             direction LR
-            G1[读取报告 + rubrics] --> G2[逐条约束评分] --> G3[程序重算 final_score]
+            G0[检索式选页] --> G1[证据化评分] --> G2[附件门控/校准] --> G3[程序重算 final_score]
         end
 
         PL --> phase1
@@ -67,8 +78,11 @@ flowchart TB
 
     subgraph outputs [输出]
         MD[phase1_output.md]
+        HTML[phase1_output.html]
         PDF[phase1_output.pdf]
         GR[grading_result.json]
+        GRPT[grading_report.md/html]
+        EV[evidence_pack.json]
         TR[agent_trace.jsonl]
         META[run_meta.json]
     end
@@ -79,12 +93,15 @@ flowchart TB
 
     Q --> T1
     P --> T2
-    R --> G1
-    T3 --> MD
-    T3 --> PDF
+    T3 --> EV
+    R --> G0
+    T5 --> MD
+    T5 --> HTML
+    T5 --> PDF
     MD --> G1
     PDF --> G1
     G3 --> GR
+    G3 --> GRPT
     phase1 --> TR
     PL --> META
     phase2 --> META
@@ -95,41 +112,55 @@ flowchart TB
 | **入口** | `cli.py` | `run` / `phase1` / `grade` / `validate` / `inspect-trace` / `init` / `ui` |
 | **入口** | `web_app.py` | 分步调用 `run_phase1_pipeline` + `run_phase2_pipeline` |
 | **编排** | `pipeline.py` | 输出路径、`run_meta`、Phase 1 / 2 串联 |
-| **Phase 1** | `agent.py` | Function Calling 工具循环：`read_text` → `read_pdf` → `write_pdf_report` |
-| **Phase 2** | `grader.py` | 按 Rubric 逐条评分，Pydantic 校验，程序重算 `final_score` |
-| **工具** | `tools.py` / `pdf_gen.py` | 文件读取、PDF 文本提取、ReportLab 渲染 |
+| **Phase 1** | `agent.py` + `phase1_state.py` | 状态机约束工具顺序：`read_text` → `read_pdf` → `extract_evidence_pack` → `write_structured_report` |
+| **Phase 2** | `grader.py` + `attachment_relevance.py` | 检索式选页、证据化评分、附件门控、程序重算 `final_score` |
+| **工具** | `tools.py` / `evidence.py` / `structured_report.py` | 证据包、结构化报告、HTML/PDF 渲染 |
 
 **Phase 1 约束**
 
 - Agent 只能访问 `query.txt` 与附件 PDF，**不读取** `rubrics.json`（避免评分标准泄露到生成阶段）。
-- 必须依次调用 `read_text` → `read_pdf` → `write_pdf_report`；缺少任一步触发 E003。
-- 报告须覆盖 query 全部要求，指标数据须来自 PDF 附件。
+- 状态机强制工具顺序；`write` 之后禁止再调工具；须输出 `PHASE1_DONE`。
+- 报告关键事实须引用证据编号 `[E01]`，证据来自 `evidence_pack.json`。
 
 **Phase 2 流程**
 
 - 读取 Phase 1 产物（Markdown / PDF）与 `rubrics.json`。
-- 对 hard / soft / optional 三类约束逐条评分（0 或 1），缺失条目自动补 0 分。
-- 按权重公式重算 `final_score` 并写入 `grading_result.json`。
+- 检索式选取附件相关页（非简单截断）；每项输出 `evidence` / `missing`。
+- 附件领域不匹配时程序门控压低分数；`final_score` 由程序重算。
 
 ---
 
 ## 安装
 
-安装 Web 能力需带 `[web]` 额外依赖（Streamlit），否则 `agentic-rubric ui` 不可用。
+默认安装仅包含 **CLI 核心依赖**（`run` / `phase1` / `grade` / `validate` / `inspect-trace` 等完整可用）。如需 Streamlit Web UI，请额外安装 `[web]` extra。
 
 ### 从 GitHub 安装（推荐）
 
 ```bash
-pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+pip install "git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
 ```
 
 固定版本：
 
 ```bash
-pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git@v0.4.0"
+pip install "agentic-rubric-runner @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git@v0.4.0"
 ```
 
+### 可选：Web UI
+
+```bash
+pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+```
+
+安装后可运行 `agentic-rubric ui` 或 `streamlit run app.py`。
+
 ### 全局 CLI（pipx）
+
+```bash
+pipx install "git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+```
+
+需要 Web 时：
 
 ```bash
 pipx install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
@@ -140,8 +171,19 @@ pipx install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigeniou
 ```bash
 git clone https://github.com/bosprimigenious/agentic-rubric-runner.git
 cd agentic-rubric-runner
-pip install -e ".[dev,web]"
+pip install -e ".[dev]"          # CLI + 测试工具
+pip install -e ".[dev,web]"      # 含 Streamlit Web UI
 ```
+
+### 依赖清单文件说明
+
+| 文件 | 用途 |
+|------|------|
+| `requirements.txt` | CLI / 核心运行时（**不是** Streamlit Cloud 默认文件） |
+| `requirements-web.txt` | 核心 + Streamlit（本地 Web 开发） |
+| `requirements-streamlit.txt` | Streamlit Cloud 部署专用（指向 `requirements-web.txt`） |
+
+安装 CLI 请使用 `pip install .` 或 `pip install -e .`，不要直接 `pip install -r requirements.txt` 后再误以为已包含 Web。
 
 ---
 
@@ -167,6 +209,7 @@ $env:DEEPSEEK_API_KEY = "sk-..."
 | `DEEPSEEK_API_KEY` | — | DeepSeek API 密钥（CLI 必需） |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | OpenAI 兼容端点 |
 | `DEEPSEEK_MODEL` | `deepseek-chat` | 模型名称 |
+| `PDF_RENDERER` | `auto` | PDF 渲染器：`auto`（WeasyPrint → ReportLab）、`html`、`reportlab` |
 
 ### 2. 运行完整流水线
 
@@ -193,9 +236,10 @@ agentic-rubric validate outputs/<run_id>/grading_result.json
 agentic-rubric inspect-trace outputs/<run_id>/agent_trace.jsonl
 ```
 
-### 5. 启动 Web 控制台
+### 5. 启动 Web 控制台（可选，需 `[web]`）
 
 ```bash
+pip install -e ".[web]"   # 若尚未安装 Web 依赖
 agentic-rubric ui
 # 或
 streamlit run app.py
@@ -213,7 +257,7 @@ streamlit run app.py
 | `validate` | 校验 `grading_result.json` 结构与分数一致性 |
 | `inspect-trace` | 格式化查看 `agent_trace.jsonl` |
 | `init` | 在当前目录生成任务模板（query / rubrics 骨架） |
-| `ui` | 启动 Streamlit 文档评审控制台 |
+| `ui` | 启动 Streamlit 文档评审控制台（需 `[web]` extra） |
 
 **常用选项**
 
@@ -240,7 +284,7 @@ agentic-rubric run ... --model deepseek-chat
 **文档评审控制台** 提供与 CLI 相同的后端能力：
 
 1. 上传 `query.txt`、PDF 附件、`rubrics.json`
-2. 在页面输入 DeepSeek API Key（公开 Demo，密钥仅存于当前会话）
+2. 在页面输入 DeepSeek API Key（密钥仅存于当前会话）
 3. 运行 Phase 1（报告生成）与 Phase 2（Rubric 评分）
 4. 查看评分摘要，下载 PDF / JSON / 审计轨迹（下载不触发重新运行）
 
@@ -267,7 +311,7 @@ agentic-rubric run ... --model deepseek-chat
 | 设置项 | 正确值 |
 |--------|--------|
 | Main file path | `app.py` |
-| Requirements file | `requirements.txt` |
+| Requirements file | `requirements-streamlit.txt` |
 | Python version | **3.11**（**不要选 3.14**，当前日志显示 3.14.6 可能导致白屏） |
 
 > **已部署但整页空白 / 控制台报 `Unable to preload CSS`：** 多半是应用仍为 **Private**（仅工作区成员可访问）。此时静态资源会 303 跳转到 `share.streamlit.io/-/auth/app`，浏览器加载不了 CSS/JS，页面只剩灰色壳子。  
@@ -281,8 +325,8 @@ agentic-rubric run ... --model deepseek-chat
 
 | 日志关键词 | 处理 |
 |------------|------|
-| `ModuleNotFoundError: aarrr_agent` | Requirements file 填错或 `main` 未拉到最新代码 → 改为 `requirements.txt` 并 redeploy |
-| `No such file: requirements-web.txt` | 拉取最新 `main`（已提供该文件）或改用 `requirements.txt` |
+| `ModuleNotFoundError: aarrr_agent` | Requirements file 填错或 `main` 未拉到最新代码 → 改为 `requirements-streamlit.txt` 并 redeploy |
+| `No such file: requirements-streamlit.txt` | 拉取最新 `main`，或改用 `requirements-web.txt` |
 | `pip install` 失败 | 检查 Python 版本是否为 3.11 |
 
 #### 第三步：区分浏览器警告与真实故障
@@ -295,16 +339,17 @@ agentic-rubric run ... --model deepseek-chat
 
 1. 登录 [share.streamlit.io](https://share.streamlit.io/)（GitHub 账号）
 2. **Create app** → Repository: `bosprimigenious/agentic-rubric-runner`，Branch: `main`，Main file: `app.py`
-3. Advanced → Requirements file: `requirements.txt`；Secrets **留空**（用户在页面输入 API Key）
+3. Advanced → Requirements file: `requirements-streamlit.txt`；Secrets **留空**（用户在页面输入 API Key）
 4. **Deploy** → Visibility 设为 **Public**
 
 **云端构建依赖**
 
 | 文件 | 作用 |
 |------|------|
-| `requirements.txt` | Python 依赖（显式列表） |
-| `requirements-web.txt` | 指向 `requirements.txt`（兼容旧配置） |
-| `packages.txt` | 系统包 `fonts-noto-cjk`（PDF 中文渲染） |
+| `requirements.txt` | CLI / 核心 Python 依赖 |
+| `requirements-web.txt` | 核心 + Streamlit（本地 Web） |
+| `requirements-streamlit.txt` | Streamlit Cloud 部署入口（推荐填此项） |
+| `packages.txt` | 系统包：`fonts-noto-cjk`、WeasyPrint 依赖（`libpango` 等） |
 | `app.py` | Streamlit 入口 |
 | `.streamlit/config.toml` | 主题配置 |
 
@@ -363,8 +408,11 @@ agentic-rubric run ... --model deepseek-chat
 | 文件 | 说明 |
 |------|------|
 | `phase1_output.md` | Agent 生成的 Markdown 报告 |
-| `phase1_output.pdf` | ReportLab 渲染的 PDF |
+| `phase1_output.html` | 管理层 HTML 模板渲染（可直接浏览器打开） |
+| `phase1_output.pdf` | WeasyPrint 导出 PDF（失败时回退 ReportLab） |
 | `grading_result.json` | Phase 2 评分结果（含逐条 reason） |
+| `grading_report.md` | 评审报告（管理层摘要、缺口、改进建议） |
+| `grading_report.html` | 评审报告 HTML 版（可直接浏览器打开） |
 | `agent_trace.jsonl` | 每行一条 JSON，记录 LLM 与工具调用 |
 | `run_meta.json` | 运行元数据（耗时、输入哈希、模型、状态） |
 
@@ -425,9 +473,15 @@ agentic-rubric-runner/
 ├── aarrr_agent/              # 核心 Python 包
 │   ├── agent.py              # Phase 1 Agent 工具循环
 │   ├── grader.py             # Phase 2 Rubric 评分
+│   ├── grading_report.py     # 评审报告、总评清洗、管理层摘要
 │   ├── pipeline.py           # 双阶段编排与输出路径
 │   ├── tools.py              # read_text / read_pdf / write_pdf_report
-│   ├── pdf_gen.py            # ReportLab PDF 渲染
+│   ├── html_report.py        # Jinja2 管理层 HTML 模板
+│   ├── html_pdf.py           # WeasyPrint PDF + ReportLab fallback
+│   ├── md_report_parser.py   # Markdown → 结构化报告
+│   ├── pdf_gen.py            # ReportLab PDF 渲染（fallback）
+│   ├── templates/            # executive_report.html
+│   ├── assets/               # executive_report.css
 │   ├── cli.py                # Typer CLI
 │   ├── web_app.py            # Streamlit UI
 │   ├── schemas.py            # Pydantic 数据模型
@@ -439,7 +493,9 @@ agentic-rubric-runner/
 ├── docs/                     # GitHub Pages 静态站
 ├── tests/                    # pytest 测试套件
 ├── .github/workflows/        # CI、Pages、PyPI 发布
-├── requirements.txt            # Streamlit Cloud 依赖清单
+├── requirements.txt            # CLI / 核心依赖
+├── requirements-web.txt        # 核心 + Streamlit
+├── requirements-streamlit.txt  # Streamlit Cloud 部署
 ├── packages.txt                # 云端系统字体包
 └── pyproject.toml
 ```
@@ -473,7 +529,7 @@ black aarrr_agent tests
 ## 安全说明
 
 - 勿将 `.env` 或真实 API Key 提交到版本库。
-- Web 公开 Demo 由用户在浏览器输入 Key，不在 Streamlit Secrets 中存储。
+- Web 控制台由用户在浏览器输入 Key，不在 Streamlit Secrets 中存储。
 - `fixtures/` 为演示材料；生产环境请替换为自有文档与评分标准。
 - Agent 工具层对文件路径有白名单校验，限制可读文件范围。
 

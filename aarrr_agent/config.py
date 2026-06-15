@@ -1,9 +1,13 @@
 """项目配置常量。"""
 
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FONTS_DIR = PROJECT_ROOT / "fonts"
+
+# PDF 渲染器：auto（先试 WeasyPrint，失败回退 ReportLab）| html | reportlab
+PDF_RENDERER = os.getenv("PDF_RENDERER", "auto")
 
 # Agent 循环上限（read_text + read_pdf + 生成报告 + write_pdf_report 通常需 4-6 轮）
 MAX_AGENT_TURNS = 20

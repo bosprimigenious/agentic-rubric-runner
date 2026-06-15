@@ -1,4 +1,4 @@
-# Streamlit Cloud / 本地 Web：显式依赖（app.py 通过 sys.path 加载 aarrr_agent）
+# CLI / 核心运行时依赖（与 pyproject.toml [project.dependencies] 对齐）
 openai>=1.30.0
 pymupdf>=1.24.0
 reportlab>=4.0.0
@@ -6,4 +6,5 @@ pydantic>=2.0.0
 typer>=0.12.0
 rich>=13.0.0
 python-dotenv>=1.0.0
-streamlit>=1.40.0,<1.60.0
+jinja2>=3.1.0
+weasyprint>=62.0

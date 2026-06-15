@@ -1,0 +1,2 @@
+# Streamlit Cloud 部署专用（Advanced → Requirements file 填此文件）
+-r requirements-web.txt

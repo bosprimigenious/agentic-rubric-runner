@@ -41,6 +41,17 @@ _CONSOLE_CSS = """
   .trace-fail { color: #b91c1c; }
   .result-pass { color: #15803d; font-weight: 600; }
   .result-fail { color: #b91c1c; font-weight: 600; }
+  .result-warn { color: #b45309; font-weight: 600; }
+  .file-ok {
+    font-size: 0.88rem; color: #334155; background: #f8fafc;
+    border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.55rem 0.75rem;
+  }
+  .file-empty { font-size: 0.88rem; color: #94a3b8; }
+  .summary-card {
+    font-size: 0.9rem; color: #334155; background: #eff6ff;
+    border: 1px solid #bfdbfe; border-left: 4px solid #1e40af;
+    border-radius: 8px; padding: 0.9rem 1rem; margin: 0.75rem 0 1rem 0;
+  }
 </style>
 """
 
@@ -63,13 +74,8 @@ def _clear_session(st) -> None:
 
 
 def _render_header(st) -> None:
-    top_left, top_right = st.columns([5, 1])
-    with top_left:
-        st.title("文档评审控制台")
-        st.caption("上传任务材料，运行受控评审流水线，导出可审计结果。")
-    with top_right:
-        st.markdown("<div style='padding-top:0.5rem'></div>", unsafe_allow_html=True)
-        st.caption("公开演示")
+    st.title("文档评审控制台")
+    st.caption("上传任务材料，运行受控评审流水线，导出可审计结果。")
 
 
 def _parse_trace_bytes(trace_bytes: bytes) -> list[dict[str, Any]]:
@@ -86,16 +92,62 @@ def _render_trace_entries(st, entries: list[dict[str, Any]]) -> None:
         css = "trace-ok" if status == "ok" else "trace-fail"
         label = "通过" if status == "ok" else "失败"
         tool = entry.get("tool", "?")
+        state = entry.get("phase1_state", "")
         dur = entry.get("duration_ms", "?")
+        state_tag = f" &nbsp;·&nbsp; {state}" if state else ""
         st.markdown(
             f'<div class="trace-row"><span class="{css}">[{label}]</span> '
-            f"{tool} &nbsp;·&nbsp; {dur} ms</div>",
+            f"{tool}{state_tag} &nbsp;·&nbsp; {dur} ms</div>",
             unsafe_allow_html=True,
         )
 
 
-def _render_grading_result(st, result) -> None:
+def _file_status_badge(name: str | None, size_bytes: int = 0) -> str:
+    if name:
+        return (
+            f'<div class="file-ok">已选择 <strong>{escape(name)}</strong>'
+            f" · {size_bytes / 1024:.1f} KB</div>"
+        )
+    return '<div class="file-empty">未选择文件</div>'
+
+
+def _constraint_detail(item, score_label: str) -> str:
+    parts = [
+        f'<span id="{escape(item.id)}"></span>',
+        f"**{item.id}** · {score_label}",
+    ]
+    if getattr(item, "evidence", None):
+        ev = "；".join(item.evidence[:3])
+        parts.append(f"<br>证据：{escape(ev)}")
+    if getattr(item, "missing", None):
+        miss = "；".join(item.missing[:3])
+        parts.append(f'<br><span class="result-fail">缺口：{escape(miss)}</span>')
+    parts.append(f"<br>{escape(item.reason)}")
+    return "".join(parts)
+
+
+def _render_grading_result(st, result, summary: dict[str, Any] | None = None) -> None:
     bd = result.score_breakdown
+    if summary is None:
+        from aarrr_agent.grading_report import build_executive_summary
+
+        summary = build_executive_summary(result, "fixtures/rubrics.json")
+    verdict_css = {
+        "通过": "result-pass",
+        "待改进": "result-warn",
+        "未通过": "result-fail",
+    }.get(summary["verdict"], "result-warn")
+
+    st.markdown(
+        f'<div class="summary-card">'
+        f'<strong>管理层摘要</strong><br>'
+        f'本次评审：<span class="{verdict_css}">{escape(summary["verdict"])}</span><br>'
+        f'最终得分：<strong>{bd.final_score:.2f}</strong> / 100<br>'
+        f'主要缺口：{escape(summary["gaps_text"])}<br>'
+        f'建议动作：{escape(summary["actions_text"])}'
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
     _section(st, "评分结果")
     m1, m2, m3, m4 = st.columns(4)
@@ -120,22 +172,29 @@ def _render_grading_result(st, result) -> None:
             mark = "通过" if h.score else "未通过"
             css = "result-pass" if h.score else "result-fail"
             st.markdown(
-                f'<span class="{css}">{mark}</span> **{h.id}** — {escape(h.reason)}',
+                f'<span class="{css}">{mark}</span> {_constraint_detail(h, "硬约束")}',
                 unsafe_allow_html=True,
             )
 
     with st.expander("软约束明细", expanded=False):
         for s in result.soft_constraints:
-            st.markdown(f"**{s.id}** · 得分 {s.score}/4 — {escape(s.reason)}")
+            st.markdown(_constraint_detail(s, f"得分 {s.score}/4"), unsafe_allow_html=True)
 
     with st.expander("可选项明细", expanded=False):
         for o in result.optional_constraints:
-            mark = "通过" if o.score else "跳过"
-            css = "result-pass" if o.score else ""
+            mark = "已满足" if o.score else "未满足"
+            css = "result-pass" if o.score else "result-fail"
             st.markdown(
-                f'<span class="{css}">{mark}</span> **{o.id}** — {escape(o.reason)}',
+                f'<span class="{css}">{mark}</span> {_constraint_detail(o, "可选项")}',
                 unsafe_allow_html=True,
             )
+
+    if summary and summary.get("gaps"):
+        _section(st, "缺口导航")
+        links = " · ".join(
+            f'<a href="#{escape(g["id"])}">{escape(g["id"])}</a>' for g in summary["gaps"][:6]
+        )
+        st.markdown(f'<div class="notice-bar">{links}</div>', unsafe_allow_html=True)
 
     st.markdown(
         f'<div class="notice-bar"><strong>总评</strong><br>{escape(result.overall_comment)}</div>',
@@ -155,7 +214,7 @@ def _render_cached_results(st, outputs: dict[str, Any]) -> None:
         _section(st, "Phase 2 — Rubric 评分")
         st.success(outputs.get("phase2_message", "Rubric 评分完成"))
         result = GradingResult.model_validate(outputs["grading_result"])
-        _render_grading_result(st, result)
+        _render_grading_result(st, result, outputs.get("executive_summary"))
     elif outputs.get("phase2_error"):
         _section(st, "Phase 2 — Rubric 评分")
         st.error(outputs["phase2_error"])
@@ -163,7 +222,7 @@ def _render_cached_results(st, outputs: dict[str, Any]) -> None:
     if outputs.get("phase1_ok"):
         _section(st, "输出文件")
         with st.container(border=True):
-            d1, d2, d3 = st.columns(3)
+            d1, d2, d3, d4, d5 = st.columns(5)
             with d1:
                 st.download_button(
                     "下载报告 PDF",
@@ -174,6 +233,44 @@ def _render_cached_results(st, outputs: dict[str, Any]) -> None:
                     use_container_width=True,
                 )
             with d2:
+                if outputs.get("html_bytes"):
+                    st.download_button(
+                        "下载报告 HTML",
+                        outputs["html_bytes"],
+                        "phase1_output.html",
+                        "text/html",
+                        key="dl_html_cached",
+                        use_container_width=True,
+                    )
+                else:
+                    st.button(
+                        "下载报告 HTML",
+                        disabled=True,
+                        use_container_width=True,
+                        key="dl_html_disabled",
+                    )
+            with d3:
+                if outputs.get("grading_report_md_bytes"):
+                    st.download_button(
+                        "下载评审报告 MD",
+                        outputs["grading_report_md_bytes"],
+                        "grading_report.md",
+                        "text/markdown",
+                        key="dl_grade_md_cached",
+                        use_container_width=True,
+                    )
+                else:
+                    st.button("下载评审报告 MD", disabled=True, use_container_width=True, key="dl_grade_md_disabled")
+                if outputs.get("grading_report_html_bytes"):
+                    st.download_button(
+                        "下载评审报告 HTML",
+                        outputs["grading_report_html_bytes"],
+                        "grading_report.html",
+                        "text/html",
+                        key="dl_grade_html_cached",
+                        use_container_width=True,
+                    )
+            with d4:
                 if outputs.get("grading_bytes"):
                     st.download_button(
                         "下载评分 JSON",
@@ -191,7 +288,7 @@ def _render_cached_results(st, outputs: dict[str, Any]) -> None:
                         help="Phase 2 成功完成后可下载。",
                         key="dl_grade_disabled",
                     )
-            with d3:
+            with d5:
                 st.download_button(
                     "下载审计轨迹",
                     outputs["trace_bytes"],
@@ -220,7 +317,11 @@ def _execute_pipeline(
         "phase1_ok": False,
         "phase2_ok": False,
         "pdf_bytes": b"",
+        "html_bytes": b"",
         "grading_bytes": None,
+        "grading_report_md_bytes": None,
+        "grading_report_html_bytes": None,
+        "executive_summary": None,
         "trace_bytes": b"",
         "trace_entries": [],
         "grading_result": None,
@@ -255,6 +356,8 @@ def _execute_pipeline(
             outputs["phase1_ok"] = True
             outputs["phase1_message"] = "报告生成完成"
             outputs["pdf_bytes"] = paths.phase1_pdf.read_bytes()
+            if paths.phase1_html.exists():
+                outputs["html_bytes"] = paths.phase1_html.read_bytes()
             outputs["trace_bytes"] = trace_bytes
             outputs["trace_entries"] = _parse_trace_bytes(trace_bytes)
         except PipelineError:
@@ -271,10 +374,17 @@ def _execute_pipeline(
                 phase1_turns=phase1_turns,
                 duration_seconds=time.perf_counter() - t0,
             )
+            from aarrr_agent.grading_report import build_executive_summary
+
             outputs["phase2_ok"] = True
             outputs["phase2_message"] = "Rubric 评分完成"
             outputs["grading_bytes"] = paths.grading_json.read_bytes()
             outputs["grading_result"] = result.model_dump()
+            outputs["executive_summary"] = build_executive_summary(result, str(rubrics_path))
+            if paths.grading_report_md.exists():
+                outputs["grading_report_md_bytes"] = paths.grading_report_md.read_bytes()
+            if paths.grading_report_html.exists():
+                outputs["grading_report_html_bytes"] = paths.grading_report_html.read_bytes()
         except PipelineError as exc:
             outputs["phase2_error"] = f"{exc.code}: {exc.message}"
         except Exception as exc:
@@ -337,10 +447,31 @@ def run_console(*, configure_page: bool = True) -> None:
         c1, c2, c3 = st.columns(3)
         with c1:
             query_file = st.file_uploader("任务描述", type=["txt"], help="query.txt")
+            st.markdown(
+                _file_status_badge(
+                    query_file.name if query_file else None,
+                    len(query_file.getvalue()) if query_file else 0,
+                ),
+                unsafe_allow_html=True,
+            )
         with c2:
             pdf_file = st.file_uploader("源文档 PDF", type=["pdf"], help="attachment.pdf")
+            st.markdown(
+                _file_status_badge(
+                    pdf_file.name if pdf_file else None,
+                    len(pdf_file.getvalue()) if pdf_file else 0,
+                ),
+                unsafe_allow_html=True,
+            )
         with c3:
             rubrics_file = st.file_uploader("评分标准", type=["json"], help="rubrics.json")
+            st.markdown(
+                _file_status_badge(
+                    rubrics_file.name if rubrics_file else None,
+                    len(rubrics_file.getvalue()) if rubrics_file else 0,
+                ),
+                unsafe_allow_html=True,
+            )
 
     if query_file and pdf_file and rubrics_file and not api_key:
         st.warning("运行前请先填写 API 密钥。")
