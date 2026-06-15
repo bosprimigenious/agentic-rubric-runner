@@ -1,5 +1,6 @@
 .venv/
 __pycache__/
+.pytest_cache/
 *.pyc
 *.pyo
 .env
@@ -18,3 +19,5 @@ fonts/*.ttc
 samples/
 *.pdf
 !fixtures/attachment.pdf
+.DS_Store
+Thumbs.db
