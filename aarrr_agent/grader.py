@@ -9,7 +9,8 @@ from typing import Any
 
 from openai import OpenAI
 
-from aarrr_agent.config import MAX_GRADING_ATTEMPTS
+from aarrr_agent.config import API_TIMEOUT_SECONDS, MAX_GRADING_ATTEMPTS
+from aarrr_agent.errors import PipelineError
 from aarrr_agent.schemas import GradingResult, ScoreBreakdown
 from aarrr_agent.tools import fit_text_to_budget, read_pdf, read_text
 
@@ -195,6 +196,7 @@ Output ONLY valid JSON, no markdown fences, no explanation outside JSON:
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
+                timeout=API_TIMEOUT_SECONDS,
             )
 
             raw = _strip_json_fences(response.choices[0].message.content or "")
@@ -203,11 +205,14 @@ Output ONLY valid JSON, no markdown fences, no explanation outside JSON:
             result = GradingResult(**data)
             return recalculate_scores(result, rubrics_path)
 
+        except PipelineError:
+            raise
         except Exception as exc:
             last_error = exc
             if attempt < MAX_GRADING_ATTEMPTS - 1:
                 print(f"[Phase 2] 第 {attempt + 1} 次尝试失败，重试... ({exc})")
 
-    raise RuntimeError(
-        f"Phase 2 评分 JSON 校验失败: {last_error}\n原始输出: {raw[:2000]}"
+    raise PipelineError(
+        "E003",
+        f"Grading JSON 校验失败（{MAX_GRADING_ATTEMPTS} 次重试后）: {last_error}",
     )

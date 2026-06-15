@@ -8,8 +8,9 @@ from typing import Any
 
 from openai import OpenAI
 
-from aarrr_agent.config import MAX_AGENT_TURNS
-from aarrr_agent.tools import TOOLS, Phase1ToolContext, dispatch_tool
+from aarrr_agent.config import API_TIMEOUT_SECONDS, MAX_AGENT_TURNS
+from aarrr_agent.errors import PipelineError
+from aarrr_agent.tools import TOOLS, Phase1ToolContext, dispatch_tool, save_trace
 
 SYSTEM_PROMPT = """你是一个专业的增长分析 Agent。
 
@@ -68,6 +69,7 @@ def run_phase1_agent(
     client: OpenAI,
     model: str,
     trace: list[dict[str, Any]],
+    emergency_trace_path: str = "agent_trace_emergency.jsonl",
 ) -> str:
     """
     Phase 1 Agent 主循环。
@@ -97,12 +99,20 @@ def run_phase1_agent(
 
     for turn in range(MAX_AGENT_TURNS):
         print(f"[Agent] Turn {turn + 1}/{MAX_AGENT_TURNS}...")
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-        )
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                timeout=API_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            save_trace(trace, emergency_trace_path)
+            raise PipelineError(
+                "E001",
+                f"API 失败（Turn {turn + 1}/{MAX_AGENT_TURNS}）: {exc}",
+            ) from exc
 
         msg = response.choices[0].message
         messages.append(_message_to_dict(msg))

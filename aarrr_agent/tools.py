@@ -12,7 +12,8 @@ from typing import Any
 
 import fitz
 
-from aarrr_agent.config import PROMPT_ATTACHMENT_BUDGET
+from aarrr_agent.config import MIN_REPORT_CONTENT_CHARS, PROMPT_ATTACHMENT_BUDGET
+from aarrr_agent.errors import PipelineError
 from aarrr_agent.pdf_gen import markdown_to_pdf
 
 TOOLS: list[dict[str, Any]] = [
@@ -135,7 +136,10 @@ def read_pdf(path: str) -> str:
                 pages.append(f"[PAGE {i}]\n{text}")
     finally:
         doc.close()
-    return "\n\n".join(pages)
+    text = "\n\n".join(pages)
+    if not text.strip():
+        raise PipelineError("E002", f"PDF 抽取无文本: {path}（可能是扫描件）")
+    return text
 
 
 def read_pdf_phase1(path: str, ctx: Phase1ToolContext) -> str:
@@ -153,6 +157,12 @@ def write_pdf_report(content: str, pdf_path: str, ctx: Phase1ToolContext | None 
         pdf = ctx.assert_write_allowed(pdf_path)
     else:
         pdf = Path(pdf_path).resolve()
+
+    if len(content) < MIN_REPORT_CONTENT_CHARS:
+        print(
+            f"[警告] 报告内容过短 ({len(content)} 字符)，"
+            f"低于建议阈值 {MIN_REPORT_CONTENT_CHARS}，可能被模型截断"
+        )
 
     pdf.parent.mkdir(parents=True, exist_ok=True)
     md_path = pdf.with_suffix(".md")

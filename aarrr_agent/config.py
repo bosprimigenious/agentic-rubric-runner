@@ -13,3 +13,9 @@ MAX_GRADING_ATTEMPTS = 3
 
 # Phase 2 prompt 中附件文本预算（字符数）；未超限时全文放入，超出时按页截取
 PROMPT_ATTACHMENT_BUDGET = 100_000
+
+# OpenAI SDK 请求超时（秒）
+API_TIMEOUT_SECONDS = 120.0
+
+# Phase 1 报告最短字符数警告阈值
+MIN_REPORT_CONTENT_CHARS = 1500
