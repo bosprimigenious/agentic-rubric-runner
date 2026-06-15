@@ -7,34 +7,19 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 from xml.sax.saxutils import escape
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+_SESSION_KEY = "run_outputs"
+
 _CONSOLE_CSS = """
 <style>
   footer {visibility: hidden;}
   .block-container {padding-top: 1.25rem; padding-bottom: 2rem; max-width: 1180px;}
-  .console-header { margin-bottom: 0.25rem; }
-  .console-title {
-    font-size: 1.65rem; font-weight: 650; letter-spacing: -0.02em;
-    color: #0f172a; margin: 0; line-height: 1.25;
-  }
-  .console-subtitle {
-    font-size: 0.92rem; color: #64748b; margin: 0.35rem 0 0 0; line-height: 1.5;
-  }
-  .badge-public {
-    display: inline-block; font-size: 0.72rem; font-weight: 600;
-    letter-spacing: 0.06em;
-    color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe;
-    border-radius: 4px; padding: 0.35rem 0.65rem; text-align: right;
-  }
-  .section-label {
-    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em;
-    color: #64748b; margin: 0 0 0.5rem 0;
-  }
   .notice-bar {
     font-size: 0.82rem; color: #475569; background: #f8fafc;
     border: 1px solid #e2e8f0; border-radius: 6px;
@@ -56,7 +41,6 @@ _CONSOLE_CSS = """
   .trace-fail { color: #b91c1c; }
   .result-pass { color: #15803d; font-weight: 600; }
   .result-fail { color: #b91c1c; font-weight: 600; }
-  .stDownloadButton button { border-radius: 6px; font-weight: 500; }
 </style>
 """
 
@@ -66,33 +50,38 @@ def _inject_styles(st) -> None:
 
 
 def _section(st, title: str) -> None:
-    st.markdown(f'<p class="section-label">{title}</p>', unsafe_allow_html=True)
+    st.markdown(f"**{title}**")
+
+
+def _init_session(st) -> None:
+    if _SESSION_KEY not in st.session_state:
+        st.session_state[_SESSION_KEY] = None
+
+
+def _clear_session(st) -> None:
+    st.session_state[_SESSION_KEY] = None
 
 
 def _render_header(st) -> None:
-    left, right = st.columns([6, 1])
-    with left:
-        st.markdown(
-            '<div class="console-header">'
-            '<p class="console-title">文档评审控制台</p>'
-            '<p class="console-subtitle">上传任务材料，运行受控评审流水线，导出可审计结果。</p>'
-            "</div>",
-            unsafe_allow_html=True,
-        )
-    with right:
-        st.markdown(
-            '<div style="text-align:right;padding-top:0.35rem;">'
-            '<span class="badge-public">公开演示</span>'
-            "</div>",
-            unsafe_allow_html=True,
-        )
+    top_left, top_right = st.columns([5, 1])
+    with top_left:
+        st.title("文档评审控制台")
+        st.caption("上传任务材料，运行受控评审流水线，导出可审计结果。")
+    with top_right:
+        st.markdown("<div style='padding-top:0.5rem'></div>", unsafe_allow_html=True)
+        st.info("公开演示", icon="🌐")
 
 
-def _render_trace(st, trace_path: Path) -> None:
-    for line in trace_path.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        entry = json.loads(line)
+def _parse_trace_bytes(trace_bytes: bytes) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for line in trace_bytes.decode("utf-8").splitlines():
+        if line.strip():
+            entries.append(json.loads(line))
+    return entries
+
+
+def _render_trace_entries(st, entries: list[dict[str, Any]]) -> None:
+    for entry in entries:
         status = entry.get("status", "?")
         css = "trace-ok" if status == "ok" else "trace-fail"
         label = "通过" if status == "ok" else "失败"
@@ -154,6 +143,146 @@ def _render_grading_result(st, result) -> None:
     )
 
 
+def _render_cached_results(st, outputs: dict[str, Any]) -> None:
+    from aarrr_agent.schemas import GradingResult
+
+    _section(st, "Phase 1 — 报告生成")
+    st.success(outputs.get("phase1_message", "报告生成完成"))
+    st.caption("工具调用日志")
+    _render_trace_entries(st, outputs["trace_entries"])
+
+    if outputs.get("phase2_ok") and outputs.get("grading_result"):
+        _section(st, "Phase 2 — Rubric 评分")
+        st.success(outputs.get("phase2_message", "Rubric 评分完成"))
+        result = GradingResult.model_validate(outputs["grading_result"])
+        _render_grading_result(st, result)
+    elif outputs.get("phase2_error"):
+        _section(st, "Phase 2 — Rubric 评分")
+        st.error(outputs["phase2_error"])
+
+    if outputs.get("phase1_ok"):
+        _section(st, "输出文件")
+        with st.container(border=True):
+            d1, d2, d3 = st.columns(3)
+            with d1:
+                st.download_button(
+                    "下载报告 PDF",
+                    outputs["pdf_bytes"],
+                    "phase1_output.pdf",
+                    "application/pdf",
+                    key="dl_pdf_cached",
+                    use_container_width=True,
+                )
+            with d2:
+                if outputs.get("grading_bytes"):
+                    st.download_button(
+                        "下载评分 JSON",
+                        outputs["grading_bytes"],
+                        "grading_result.json",
+                        "application/json",
+                        key="dl_grade_cached",
+                        use_container_width=True,
+                    )
+                else:
+                    st.button(
+                        "下载评分 JSON",
+                        disabled=True,
+                        use_container_width=True,
+                        help="Phase 2 成功完成后可下载。",
+                        key="dl_grade_disabled",
+                    )
+            with d3:
+                st.download_button(
+                    "下载审计轨迹",
+                    outputs["trace_bytes"],
+                    "agent_trace.jsonl",
+                    "text/plain",
+                    key="dl_trace_cached",
+                    use_container_width=True,
+                )
+
+
+def _execute_pipeline(
+    *,
+    query_bytes: bytes,
+    pdf_bytes: bytes,
+    rubrics_bytes: bytes,
+    api_key: str,
+    base_url: str,
+    model: str,
+) -> dict[str, Any]:
+    from openai import OpenAI
+
+    from aarrr_agent.errors import PipelineError
+    from aarrr_agent.pipeline import resolve_output_paths, run_phase1_pipeline, run_phase2_pipeline
+
+    outputs: dict[str, Any] = {
+        "phase1_ok": False,
+        "phase2_ok": False,
+        "pdf_bytes": b"",
+        "grading_bytes": None,
+        "trace_bytes": b"",
+        "trace_entries": [],
+        "grading_result": None,
+        "phase1_message": "",
+        "phase2_message": "",
+        "phase2_error": None,
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        query_path = tmp / "query.txt"
+        pdf_path = tmp / "attachment.pdf"
+        rubrics_path = tmp / "rubrics.json"
+        query_path.write_bytes(query_bytes)
+        pdf_path.write_bytes(pdf_bytes)
+        rubrics_path.write_bytes(rubrics_bytes)
+
+        client = OpenAI(api_key=api_key, base_url=base_url)
+        paths = resolve_output_paths(tmp)
+        t0 = time.perf_counter()
+        phase1_turns = 0
+
+        try:
+            phase1_turns = run_phase1_pipeline(
+                query=query_path,
+                pdf=pdf_path,
+                client=client,
+                model=model,
+                paths=paths,
+            )
+            trace_bytes = paths.trace_jsonl.read_bytes()
+            outputs["phase1_ok"] = True
+            outputs["phase1_message"] = "报告生成完成"
+            outputs["pdf_bytes"] = paths.phase1_pdf.read_bytes()
+            outputs["trace_bytes"] = trace_bytes
+            outputs["trace_entries"] = _parse_trace_bytes(trace_bytes)
+        except PipelineError:
+            raise
+
+        try:
+            result = run_phase2_pipeline(
+                query=query_path,
+                pdf=pdf_path,
+                rubrics=rubrics_path,
+                client=client,
+                model=model,
+                paths=paths,
+                phase1_turns=phase1_turns,
+                duration_seconds=time.perf_counter() - t0,
+            )
+            outputs["phase2_ok"] = True
+            outputs["phase2_message"] = "Rubric 评分完成"
+            outputs["grading_bytes"] = paths.grading_json.read_bytes()
+            outputs["grading_result"] = result.model_dump()
+        except PipelineError as exc:
+            outputs["phase2_error"] = f"{exc.code}: {exc.message}"
+        except Exception as exc:
+            outputs["phase2_error"] = f"Rubric 评分失败：{exc}"
+
+    return outputs
+
+
 def run_console(*, configure_page: bool = True) -> None:
     """渲染 Streamlit 控制台。"""
     import streamlit as st
@@ -170,6 +299,7 @@ def run_console(*, configure_page: bool = True) -> None:
             },
         )
 
+    _init_session(st)
     _inject_styles(st)
     _render_header(st)
 
@@ -197,6 +327,11 @@ def run_console(*, configure_page: bool = True) -> None:
                 "硬约束 / 软约束 / 可选项满分随 Rubric 条目数变化。"
             )
 
+        if st.session_state[_SESSION_KEY]:
+            if st.button("清除本次结果", use_container_width=True):
+                _clear_session(st)
+                st.rerun()
+
     _section(st, "输入文件")
     with st.container(border=True):
         c1, c2, c3 = st.columns(3)
@@ -213,121 +348,30 @@ def run_console(*, configure_page: bool = True) -> None:
     _section(st, "执行")
     with st.container(border=True):
         ready = all([query_file, pdf_file, rubrics_file, api_key])
-        run_btn = st.button("运行评审", type="primary", disabled=not ready, use_container_width=False)
+        run_btn = st.button("运行评审", type="primary", disabled=not ready, use_container_width=True)
 
-    if not run_btn:
-        return
-
-    from openai import OpenAI
-
-    from aarrr_agent.errors import PipelineError
-    from aarrr_agent.pipeline import resolve_output_paths, run_phase1_pipeline, run_phase2_pipeline
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
-        query_path = tmp / "query.txt"
-        pdf_path = tmp / "attachment.pdf"
-        rubrics_path = tmp / "rubrics.json"
-        query_path.write_bytes(query_file.getvalue())
-        pdf_path.write_bytes(pdf_file.getvalue())
-        rubrics_path.write_bytes(rubrics_file.getvalue())
-
-        client = OpenAI(api_key=api_key, base_url=base_url)
-        paths = resolve_output_paths(tmp)
-        t0 = time.perf_counter()
-        phase1_ok = False
-        grading_bytes: bytes | None = None
-
-        _section(st, "Phase 1 — 报告生成")
-        phase1_status = st.status("正在生成报告…", expanded=True)
-        phase1_turns = 0
-
-        try:
-            with phase1_status:
-                phase1_turns = run_phase1_pipeline(
-                    query=query_path,
-                    pdf=pdf_path,
-                    client=client,
+    if run_btn and ready:
+        with st.status("正在运行评审流水线（Phase 1 → Phase 2）…", expanded=True) as status:
+            try:
+                st.session_state[_SESSION_KEY] = _execute_pipeline(
+                    query_bytes=query_file.getvalue(),
+                    pdf_bytes=pdf_file.getvalue(),
+                    rubrics_bytes=rubrics_file.getvalue(),
+                    api_key=api_key,
+                    base_url=base_url,
                     model=model,
-                    paths=paths,
                 )
-                st.caption("工具调用日志")
-                _render_trace(st, paths.trace_jsonl)
-            phase1_status.update(label="报告生成完成", state="complete")
-            phase1_ok = True
-        except PipelineError as exc:
-            phase1_status.update(label=f"{exc.code}: {exc.message}", state="error")
-            st.stop()
-        except Exception as exc:
-            phase1_status.update(label=f"报告生成失败：{exc}", state="error")
-            st.stop()
+                status.update(label="评审完成", state="complete")
+            except Exception as exc:
+                status.update(label=f"运行失败：{exc}", state="error")
+                st.session_state[_SESSION_KEY] = None
+                st.stop()
+        st.rerun()
 
-        _section(st, "Phase 2 — Rubric 评分")
-        phase2_status = st.status("正在执行 Rubric 评分…", expanded=True)
-
-        try:
-            with phase2_status:
-                result = run_phase2_pipeline(
-                    query=query_path,
-                    pdf=pdf_path,
-                    rubrics=rubrics_path,
-                    client=client,
-                    model=model,
-                    paths=paths,
-                    phase1_turns=phase1_turns,
-                    duration_seconds=time.perf_counter() - t0,
-                )
-                _render_grading_result(st, result)
-                grading_bytes = paths.grading_json.read_bytes()
-            phase2_status.update(label="Rubric 评分完成", state="complete")
-        except PipelineError as exc:
-            phase2_status.update(label=f"{exc.code}: {exc.message}", state="error")
-            if phase1_ok:
-                st.warning("Phase 1 产物仍可于下方下载。")
-        except Exception as exc:
-            phase2_status.update(label=f"Rubric 评分失败：{exc}", state="error")
-            if phase1_ok:
-                st.warning("Phase 1 产物仍可于下方下载。")
-
-        if phase1_ok:
-            _section(st, "输出文件")
-            with st.container(border=True):
-                d1, d2, d3 = st.columns(3)
-                with d1:
-                    st.download_button(
-                        "下载报告 PDF",
-                        paths.phase1_pdf.read_bytes(),
-                        "phase1_output.pdf",
-                        "application/pdf",
-                        key="dl_pdf",
-                        use_container_width=True,
-                    )
-                with d2:
-                    if grading_bytes:
-                        st.download_button(
-                            "下载评分 JSON",
-                            grading_bytes,
-                            "grading_result.json",
-                            "application/json",
-                            key="dl_grade",
-                            use_container_width=True,
-                        )
-                    else:
-                        st.button(
-                            "下载评分 JSON",
-                            disabled=True,
-                            use_container_width=True,
-                            help="Phase 2 成功完成后可下载。",
-                        )
-                with d3:
-                    st.download_button(
-                        "下载审计轨迹",
-                        paths.trace_jsonl.read_bytes(),
-                        "agent_trace.jsonl",
-                        "text/plain",
-                        key="dl_trace",
-                        use_container_width=True,
-                    )
+    if st.session_state[_SESSION_KEY]:
+        st.divider()
+        st.caption("以下为最近一次评审结果（下载文件不会清除缓存，无需重新运行）。")
+        _render_cached_results(st, st.session_state[_SESSION_KEY])
 
 
 if __name__ == "__main__":
