@@ -14,6 +14,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from aarrr_agent.errors import PipelineError
+
 _SESSION_KEY = "run_outputs"
 
 _CONSOLE_CSS = """
@@ -79,7 +81,7 @@ def _app_version() -> str:
 
         return version("agentic-rubric-runner")
     except Exception:
-        return "0.4.5"
+        return "0.4.6"
 
 
 def _render_header(st) -> None:
@@ -323,7 +325,6 @@ def _execute_pipeline(
     from openai import OpenAI
 
     from aarrr_agent.attachment_relevance import format_e007_user_message, preflight_attachment_pdf
-    from aarrr_agent.errors import PipelineError
     from aarrr_agent.pipeline import resolve_output_paths, run_phase1_pipeline, run_phase2_pipeline
 
     outputs: dict[str, Any] = {
