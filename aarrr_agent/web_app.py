@@ -79,7 +79,7 @@ def _app_version() -> str:
 
         return version("agentic-rubric-runner")
     except Exception:
-        return "0.4.1"
+        return "0.4.2"
 
 
 def _render_header(st) -> None:

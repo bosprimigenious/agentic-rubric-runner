@@ -10,7 +10,6 @@ from openai import OpenAI
 
 from aarrr_agent.config import MAX_AGENT_TURNS
 from aarrr_agent.errors import PipelineError
-from aarrr_agent.evidence import format_evidence_for_prompt, load_evidence_pack
 from aarrr_agent.llm import call_chat_completion
 from aarrr_agent.phase1_state import WRITE_TOOLS
 from aarrr_agent.tools import TOOLS, Phase1ToolContext, dispatch_tool, save_trace
@@ -42,6 +41,9 @@ def _message_to_dict(msg: Any) -> dict[str, Any]:
     data: dict[str, Any] = {"role": msg.role}
     if msg.content is not None:
         data["content"] = msg.content
+    elif msg.tool_calls:
+        # DeepSeek/OpenAI 要求带 tool_calls 的 assistant 消息显式 content=null
+        data["content"] = None
     if msg.tool_calls:
         data["tool_calls"] = [
             {
@@ -55,6 +57,62 @@ def _message_to_dict(msg: Any) -> dict[str, Any]:
             for tc in msg.tool_calls
         ]
     return data
+
+
+def _report_content_from_tool(tool_name: str, tool_args: dict[str, Any]) -> str | None:
+    if tool_name == "write_pdf_report":
+        return tool_args.get("content")
+    if tool_name == "write_structured_report":
+        from aarrr_agent.structured_report import StructuredReport, structured_to_markdown
+
+        return structured_to_markdown(
+            StructuredReport.model_validate(tool_args.get("report", {}))
+        )
+    return None
+
+
+def _execute_tool_turn(
+    msg: Any,
+    messages: list[dict[str, Any]],
+    trace: list[dict[str, Any]],
+    ctx: Phase1ToolContext,
+) -> str | None:
+    """
+    执行一轮 tool_calls，并按规定顺序写入 messages：
+    assistant(tool_calls) → tool × N（中间不得插入 user/assistant）。
+    """
+    report_content: str | None = None
+
+    for tc in msg.tool_calls:
+        tool_name = tc.function.name
+        try:
+            tool_args = json.loads(tc.function.arguments or "{}")
+        except json.JSONDecodeError as exc:
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": f"[工具错误] 参数 JSON 无效: {exc}",
+                }
+            )
+            continue
+
+        try:
+            tool_result = dispatch_tool(tool_name, tool_args, trace, ctx=ctx)
+        except PipelineError as exc:
+            tool_result = f"[{exc.code}] {exc.message}"
+        except Exception as exc:
+            tool_result = f"[工具错误] {type(exc).__name__}: {exc}"
+
+        written = _report_content_from_tool(tool_name, tool_args)
+        if written:
+            report_content = written
+
+        messages.append(
+            {"role": "tool", "tool_call_id": tc.id, "content": tool_result}
+        )
+
+    return report_content
 
 
 def run_phase1_agent(
@@ -107,30 +165,9 @@ def run_phase1_agent(
         messages.append(_message_to_dict(msg))
 
         if msg.tool_calls:
-            for tc in msg.tool_calls:
-                tool_name = tc.function.name
-                tool_args = json.loads(tc.function.arguments)
-                tool_result = dispatch_tool(tool_name, tool_args, trace, ctx=ctx)
-
-                if tool_name == "write_pdf_report":
-                    report_content = tool_args.get("content")
-                elif tool_name == "write_structured_report":
-                    from aarrr_agent.structured_report import structured_to_markdown, StructuredReport
-                    report_content = structured_to_markdown(
-                        StructuredReport.model_validate(tool_args.get("report", {}))
-                    )
-                elif tool_name == "extract_evidence_pack" and ctx.evidence_path.exists():
-                    pack = load_evidence_pack(ctx.evidence_path)
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": f"证据包已就绪，写报告时请引用：\n{format_evidence_for_prompt(pack)[:3000]}",
-                        }
-                    )
-
-                messages.append(
-                    {"role": "tool", "tool_call_id": tc.id, "content": tool_result}
-                )
+            written = _execute_tool_turn(msg, messages, trace, ctx)
+            if written:
+                report_content = written
             continue
 
         if msg.content and "PHASE1_DONE" in msg.content:
