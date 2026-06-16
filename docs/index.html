@@ -12,7 +12,7 @@
     <div class="container">
       <p class="eyebrow">Python 3.10+ · Open Source</p>
       <h1>文档评审控制台</h1>
-      <p class="subtitle">可审计的文档评审流水线 — 生成报告、Rubric 评分、导出完整轨迹。</p>
+      <p class="subtitle">可审计的文档评审流水线 — 生成报告、Rubric 评分、Agent Benchmark 与完整轨迹。</p>
       <div class="hero-actions">
         <a class="btn primary" href="https://github.com/bosprimigenious/agentic-rubric-runner" target="_blank" rel="noopener">源码仓库</a>
         <a class="btn secondary" href="https://agentic-rubric-runner.streamlit.app/" target="_blank" rel="noopener">Deploy Console</a>
@@ -50,13 +50,17 @@ agentic-rubric --help</code></pre>
 agentic-rubric run \
   --query fixtures/query.txt \
   --pdf fixtures/attachment.pdf \
-  --rubrics fixtures/rubrics.json</code></pre>
+  --rubrics fixtures/rubrics.json
+
+agentic-rubric bench \
+  --manifest fixtures/benchmarks/agent_cases.json \
+  --out outputs/bench</code></pre>
       </div>
       <div class="card">
         <h2>Deploy Console</h2>
         <p>上传材料、运行 Phase 1 / Phase 2，下载 PDF、JSON 与审计轨迹。</p>
         <p><a href="https://agentic-rubric-runner.streamlit.app/" target="_blank" rel="noopener">agentic-rubric-runner.streamlit.app</a></p>
-        <p class="muted">在线评审 — 页面输入 API Key，结果缓存于当前会话。</p>
+        <p class="muted">在线评审 — 页面输入 API Key，结果缓存于当前会话。部署说明见 <a href="streamlit_deploy.md">Streamlit Cloud guide</a>。</p>
       </div>
     </section>
 
@@ -79,6 +83,8 @@ agentic-rubric run \
           <li><code>agent_trace.jsonl</code> — step / timestamp / duration</li>
           <li>Phase 1 path whitelist</li>
           <li><code>run_meta.json</code> — input SHA256</li>
+          <li><code>agent_eval.json</code> — Agent run score</li>
+          <li><code>agent_benchmark_result.json</code> — suite summary</li>
           <li>Structured error codes E001–E006</li>
         </ul>
       </div>
