@@ -24,6 +24,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://bosprimigenious.github.io/agentic-rubric-runner/"
 Repository = "https://github.com/bosprimigenious/agentic-rubric-runner"
+PyPI = "https://pypi.org/project/agentic-rubric-runner/"
 "Deploy Console" = "https://agentic-rubric-runner.streamlit.app/"
 
 [project.optional-dependencies]

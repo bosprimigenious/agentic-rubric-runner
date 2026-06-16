@@ -1,5 +1,10 @@
 # agentic-rubric-runner
 
+[![PyPI](https://img.shields.io/pypi/v/agentic-rubric-runner.svg)](https://pypi.org/project/agentic-rubric-runner/)
+[![Python](https://img.shields.io/pypi/pyversions/agentic-rubric-runner.svg)](https://pypi.org/project/agentic-rubric-runner/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Deploy Console](https://img.shields.io/badge/Deploy%20Console-Streamlit-ff4b4b.svg)](https://agentic-rubric-runner.streamlit.app/)
+
 可审计的文档约束型 Agent 流水线：读取任务说明与 PDF 附件，生成结构化中文报告，按 Rubric 自动评分，并输出完整工具调用轨迹。
 
 适用于「给定参考文档 + 明确任务要求 + 结构化评分标准」的文档生成与质量评估场景，例如增长指标方案、研究报告摘要、合规性检查等。
@@ -13,6 +18,7 @@
 
 | 资源 | 链接 |
 |------|------|
+| PyPI | https://pypi.org/project/agentic-rubric-runner/ |
 | 展示页 | https://bosprimigenious.github.io/agentic-rubric-runner/ |
 | 源码 | https://github.com/bosprimigenious/agentic-rubric-runner |
 | Deploy Console | https://agentic-rubric-runner.streamlit.app/ |
@@ -132,24 +138,25 @@ flowchart TB
 
 ## 安装
 
-默认安装仅包含 **CLI 核心依赖**（`run` / `phase1` / `grade` / `validate` / `inspect-trace` 等完整可用）。如需 Streamlit Web UI，请额外安装 `[web]` extra。
+默认安装仅包含 **CLI 核心依赖**（`run` / `phase1` / `grade` / `validate` / `eval-run` / `bench` / `inspect-trace` 等完整可用）。如需 Streamlit Web UI，请额外安装 `[web]` extra。
 
-### 从 GitHub 安装（推荐）
+### 从 PyPI 安装（推荐）
 
 ```bash
-pip install "git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+pip install agentic-rubric-runner
+agentic-rubric --help
 ```
 
 固定版本：
 
 ```bash
-pip install "agentic-rubric-runner @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git@v0.4.0"
+pip install "agentic-rubric-runner==0.5.0"
 ```
 
 ### 可选：Web UI
 
 ```bash
-pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+pip install "agentic-rubric-runner[web]"
 ```
 
 安装后可运行 `agentic-rubric ui` 或 `streamlit run app.py`。
@@ -157,13 +164,19 @@ pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious
 ### 全局 CLI（pipx）
 
 ```bash
-pipx install "git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+pipx install agentic-rubric-runner
 ```
 
 需要 Web 时：
 
 ```bash
-pipx install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+pipx install "agentic-rubric-runner[web]"
+```
+
+### 从 GitHub 安装（开发版）
+
+```bash
+pip install "git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
 ```
 
 ### 本地开发
@@ -292,7 +305,12 @@ agentic-rubric run --query q.txt --pdf doc.pdf --rubrics rubrics.json --out outp
 
 # 分步执行
 agentic-rubric phase1 --query q.txt --pdf doc.pdf --out outputs/demo
-agentic-rubric grade --rubrics rubrics.json --phase1-md outputs/demo/phase1_output.md --out outputs/demo
+agentic-rubric grade \
+  --phase1 outputs/demo/phase1_output.pdf \
+  --rubrics rubrics.json \
+  --query q.txt \
+  --attachment doc.pdf \
+  --out outputs/demo/grading_result.json
 
 # 切换模型
 agentic-rubric run ... --model deepseek-chat
@@ -487,6 +505,7 @@ final_score =
 | E004 | 报告可能不完整 | 章节缺失等警告（不中断流水线） |
 | E005 | 评分 JSON 无效 | Phase 2 输出无法通过 Pydantic 校验 |
 | E006 | 中文字体缺失 | 本地或云端未安装 CJK 字体 |
+| E007 | 附件与任务领域不匹配 | Phase 2 门控压低分数，避免离题材料被强行类比 |
 
 ---
 
@@ -531,7 +550,7 @@ agentic-rubric-runner/
 ## 开发与测试
 
 ```bash
-# 运行测试（当前 18 项）
+# 运行测试
 pytest -q
 
 # 打包 wheel

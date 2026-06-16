@@ -68,6 +68,22 @@ a:hover {
   flex-wrap: wrap;
 }
 
+.hero-meta {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 1.4rem;
+}
+
+.hero-meta span {
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 0.35rem 0.7rem;
+}
+
 .btn {
   display: inline-block;
   padding: 0.7rem 1.1rem;

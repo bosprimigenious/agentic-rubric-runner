@@ -3,19 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>文档评审控制台</title>
-  <meta name="description" content="可审计的文档约束型 Agent 流水线 — 报告生成与 Rubric 评分" />
+  <title>agentic-rubric-runner</title>
+  <meta name="description" content="PyPI-ready Agent benchmark and document-grounded rubric evaluation runner" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="hero">
     <div class="container">
-      <p class="eyebrow">Python 3.10+ · Open Source</p>
-      <h1>文档评审控制台</h1>
-      <p class="subtitle">可审计的文档评审流水线 — 生成报告、Rubric 评分、Agent Benchmark 与完整轨迹。</p>
+      <p class="eyebrow">PyPI · Python 3.10+ · MIT</p>
+      <h1>agentic-rubric-runner</h1>
+      <p class="subtitle">可审计的文档约束型 Agent 流水线：报告生成、Rubric 评分、Agent Benchmark 与完整工具轨迹。</p>
       <div class="hero-actions">
-        <a class="btn primary" href="https://github.com/bosprimigenious/agentic-rubric-runner" target="_blank" rel="noopener">源码仓库</a>
+        <a class="btn primary" href="https://pypi.org/project/agentic-rubric-runner/" target="_blank" rel="noopener">PyPI Package</a>
+        <a class="btn secondary" href="https://github.com/bosprimigenious/agentic-rubric-runner" target="_blank" rel="noopener">GitHub</a>
         <a class="btn secondary" href="https://agentic-rubric-runner.streamlit.app/" target="_blank" rel="noopener">Deploy Console</a>
+      </div>
+      <div class="hero-meta" aria-label="Project status">
+        <span>Latest: 0.5.0</span>
+        <span>CLI: agentic-rubric</span>
+        <span>Bench: manifest-driven</span>
       </div>
     </div>
   </header>
@@ -31,12 +37,12 @@
     </section>
 
     <section class="card highlight">
-      <h2>Install from GitHub</h2>
-      <pre><code>pip install "agentic-rubric-runner[web] @ git+https://github.com/bosprimigenious/agentic-rubric-runner.git"
+      <h2>Install from PyPI</h2>
+      <pre><code>pip install agentic-rubric-runner
 
 export DEEPSEEK_API_KEY="sk-your-key"
 agentic-rubric --help</code></pre>
-      <p class="muted">Include <code>[web]</code> for Streamlit support.</p>
+      <p class="muted">Install <code>agentic-rubric-runner[web]</code> only when you need the local Streamlit UI.</p>
     </section>
 
     <section class="grid two-col">
@@ -85,7 +91,7 @@ agentic-rubric bench \
           <li><code>run_meta.json</code> — input SHA256</li>
           <li><code>agent_eval.json</code> — Agent run score</li>
           <li><code>agent_benchmark_result.json</code> — suite summary</li>
-          <li>Structured error codes E001–E006</li>
+          <li>Structured error codes E001–E007</li>
         </ul>
       </div>
     </section>
@@ -93,7 +99,7 @@ agentic-rubric bench \
 
   <footer class="footer">
     <div class="container">
-      <p>MIT · <a href="https://github.com/bosprimigenious/agentic-rubric-runner">bosprimigenious/agentic-rubric-runner</a></p>
+      <p>MIT · <a href="https://github.com/bosprimigenious/agentic-rubric-runner">GitHub</a> · <a href="https://pypi.org/project/agentic-rubric-runner/">PyPI</a></p>
     </div>
   </footer>
 </body>
