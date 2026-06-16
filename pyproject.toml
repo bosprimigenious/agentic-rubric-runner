@@ -37,9 +37,5 @@ aarrr-agent = "aarrr_agent.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["aarrr_agent"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"aarrr_agent/templates" = "aarrr_agent/templates"
-"aarrr_agent/assets" = "aarrr_agent/assets"
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
