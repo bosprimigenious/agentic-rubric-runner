@@ -42,6 +42,12 @@ ARTIFACT_PATHS = {
     "agent_trace.jsonl": "trace_jsonl",
     "run_meta.json": "run_meta",
 }
+INPUT_ERROR_CODES = {
+    "query": "E005",
+    "pdf": "E002",
+    "rubrics": "E005",
+}
+CALIBRATION_SIGNAL_TOKENS = ("程序门控", "校准", "保守", "压低", "重算")
 
 
 @dataclass
@@ -241,11 +247,16 @@ def _phase2_score(paths: OutputPaths, rubrics_path: Path | None, result: Grading
                         needs_reference_ok = False
     score += _score_item(needs_reference_ok, 3, issues, "source-dependent scoring lacks evidence")
 
-    gated = any("程序门控" in item.reason for item in [*result.hard_constraints, *result.soft_constraints, *result.optional_constraints])
-    calibrated = all(0 <= item.score <= 4 for item in result.soft_constraints)
-    score += _score_item(gated or calibrated, 3, issues, "calibration/gating signal missing")
+    score += _score_item(_has_calibration_or_gate_signal(result), 3, issues, "calibration/gating signal missing")
 
     return score, {"score": round(score, 2), "max_score": 15.0, "issues": issues}
+
+
+def _has_calibration_or_gate_signal(result: GradingResult) -> bool:
+    items = [*result.hard_constraints, *result.soft_constraints, *result.optional_constraints]
+    texts = [getattr(result, "overall_comment", "") or ""]
+    texts.extend(f"{item.reason} {' '.join(getattr(item, 'missing', []))}" for item in items)
+    return any(token in text for token in CALIBRATION_SIGNAL_TOKENS for text in texts)
 
 
 def _task_success_score(paths: OutputPaths, result: GradingResult | None, expected: dict[str, Any]) -> tuple[float, dict[str, Any]]:
@@ -311,7 +322,7 @@ def _robustness_score(category: str, expected: dict[str, Any], result: GradingRe
 
     if category == "domain_mismatch":
         max_report = expected.get("max_report_score")
-        ok = result is None or max_report is None or result.score_breakdown.final_score <= float(max_report)
+        ok = max_report is None or (result is not None and result.score_breakdown.final_score <= float(max_report))
         score += _score_item(ok, 2, issues, "domain mismatch was not capped")
     else:
         score += 2
@@ -429,6 +440,7 @@ def evaluate_agent_run(
         failure_types,
         status,
         missing_required_artifacts=missing_required_artifacts,
+        error_code=error_code,
     )
 
     data = {
@@ -483,6 +495,7 @@ def _case_passed(
     failure_types: list[str],
     status: str,
     missing_required_artifacts: list[str] | None = None,
+    error_code: str | None = None,
 ) -> bool:
     if missing_required_artifacts:
         return False
@@ -495,9 +508,13 @@ def _case_passed(
         return False
     if "min_agent_score" in expected and agent_score < float(expected["min_agent_score"]):
         return False
+    if ("min_report_score" in expected or "max_report_score" in expected) and report_score is None:
+        return False
     if report_score is not None and "min_report_score" in expected and report_score < float(expected["min_report_score"]):
         return False
     if report_score is not None and "max_report_score" in expected and report_score > float(expected["max_report_score"]):
+        return False
+    if "expected_error_code" in expected and error_code != expected["expected_error_code"]:
         return False
     required_failure = expected.get("required_failure_type")
     if required_failure and required_failure not in failure_types:
@@ -518,14 +535,14 @@ def _resolve_manifest_path(manifest: Path, raw: str) -> Path:
     return manifest.parent / path
 
 
-def _input_error_for_case(case: dict[str, Any], manifest: Path) -> tuple[str, str] | None:
+def _input_error_for_case(case: dict[str, Any], manifest: Path) -> tuple[str, str, str] | None:
     for key in ("query", "pdf", "rubrics"):
         value = case.get(key)
         if not value:
-            return "input_error", f"missing case field: {key}"
+            return "input_error", f"missing case field: {key}", INPUT_ERROR_CODES[key]
         path = _resolve_manifest_path(manifest, str(value))
         if not path.exists():
-            return "input_error", f"input path does not exist: {path}"
+            return "input_error", f"input path does not exist: {path}", INPUT_ERROR_CODES[key]
     return None
 
 
@@ -541,7 +558,7 @@ def _minimal_failed_eval(
         "case_id": case.get("id"),
         "category": case.get("category"),
         "status": "failed",
-        "passed": _case_passed(case.get("expected", {}), 0.0, None, [failure_type], "failed"),
+        "passed": _case_passed(case.get("expected", {}), 0.0, None, [failure_type], "failed", error_code=error_code),
         "agent_score": 0.0,
         "report_score": None,
         "dimensions": {key: 0.0 for key in DEFAULT_AGENT_WEIGHTS},
@@ -580,8 +597,8 @@ def run_benchmark(
 
         input_error = _input_error_for_case(case, manifest_path)
         if input_error:
-            failure_type, message = input_error
-            eval_data = _minimal_failed_eval(case, paths, failure_type=failure_type, error_message=message, error_code=case.get("expected", {}).get("expected_error_code"))
+            failure_type, message, error_code = input_error
+            eval_data = _minimal_failed_eval(case, paths, failure_type=failure_type, error_message=message, error_code=error_code)
             results.append(
                 CaseRunResult(case_id, str(case.get("category", "")), "failed", bool(eval_data["passed"]), str(paths.directory), eval_data, eval_data.get("error_code"), message)
             )

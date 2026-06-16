@@ -2,6 +2,7 @@
 
 import inspect
 import json
+from types import SimpleNamespace
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -9,6 +10,8 @@ from typer.testing import CliRunner
 from aarrr_agent.benchmark import (
     _case_passed,
     _derive_failure_types,
+    _has_calibration_or_gate_signal,
+    _input_error_for_case,
     evaluate_agent_run,
     evaluate_release_gates,
     run_benchmark,
@@ -83,6 +86,50 @@ def test_required_artifacts_block_case_pass():
         "completed",
         missing_required_artifacts=["phase1_output.pdf"],
     )
+
+
+def test_report_score_gates_require_grading_result():
+    assert not _case_passed(
+        {"status": "completed_or_gated", "max_report_score": 10},
+        80.0,
+        None,
+        ["domain_mismatch"],
+        "failed",
+    )
+
+
+def test_expected_error_code_must_match_observed_code():
+    assert not _case_passed(
+        {"status": "failed", "required_failure_type": "input_error", "expected_error_code": "E002"},
+        0.0,
+        None,
+        ["input_error"],
+        "failed",
+        error_code="E005",
+    )
+
+
+def test_input_error_code_is_derived_from_missing_pdf(tmp_path):
+    case = {"query": "query.txt", "pdf": "missing.pdf", "rubrics": "rubrics.json"}
+    (tmp_path / "query.txt").write_text("query", encoding="utf-8")
+    (tmp_path / "rubrics.json").write_text("{}", encoding="utf-8")
+    assert _input_error_for_case(case, tmp_path / "manifest.json") == (
+        "input_error",
+        f"input path does not exist: {tmp_path / 'missing.pdf'}",
+        "E002",
+    )
+
+
+def test_calibration_signal_requires_real_text_marker():
+    result = SimpleNamespace(
+        hard_constraints=[],
+        soft_constraints=[SimpleNamespace(reason="looks fine", missing=[], score=4)],
+        optional_constraints=[],
+        overall_comment="",
+    )
+    assert not _has_calibration_or_gate_signal(result)
+    result.soft_constraints[0].reason = "程序门控：附件领域不匹配"
+    assert _has_calibration_or_gate_signal(result)
 
 
 def test_release_gates_include_critical_and_grounding_rates():
