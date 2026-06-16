@@ -31,6 +31,17 @@ DEFAULT_AGENT_WEIGHTS = {
 WRITE_TOOLS = {"write_pdf_report", "write_structured_report"}
 EXPECTED_TOOL_PREFIX = ["read_text", "read_pdf", "extract_evidence_pack"]
 EVIDENCE_REF_RE = re.compile(r"\[E(\d{2})\]")
+ARTIFACT_PATHS = {
+    "phase1_output.md": "phase1_md",
+    "phase1_output.html": "phase1_html",
+    "phase1_output.pdf": "phase1_pdf",
+    "evidence_pack.json": "evidence_pack",
+    "grading_result.json": "grading_json",
+    "grading_report.md": "grading_report_md",
+    "grading_report.html": "grading_report_html",
+    "agent_trace.jsonl": "trace_jsonl",
+    "run_meta.json": "run_meta",
+}
 
 
 @dataclass
@@ -124,6 +135,16 @@ def _artifact_status(paths: OutputPaths) -> dict[str, bool]:
         "run_meta": paths.run_meta.exists() and _safe_file_size(paths.run_meta) > 0,
         "grading": paths.grading_json.exists() and _safe_file_size(paths.grading_json) > 0,
     }
+
+
+def _missing_required_artifacts(paths: OutputPaths, expected: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    for artifact in expected.get("required_artifacts", []):
+        attr = ARTIFACT_PATHS.get(str(artifact))
+        path = getattr(paths, attr, paths.directory / str(artifact)) if attr else paths.directory / str(artifact)
+        if not path.exists() or _safe_file_size(path) <= 0:
+            missing.append(str(artifact))
+    return missing
 
 
 def _load_grading_result(paths: OutputPaths) -> GradingResult | None:
@@ -398,8 +419,17 @@ def evaluate_agent_run(
             "safety": safety,
         },
         failure_type=failure_type,
+        category=category,
     )
-    passed = _case_passed(expected, agent_score, report_score, failure_types, status)
+    missing_required_artifacts = _missing_required_artifacts(paths, expected)
+    passed = _case_passed(
+        expected,
+        agent_score,
+        report_score,
+        failure_types,
+        status,
+        missing_required_artifacts=missing_required_artifacts,
+    )
 
     data = {
         "case_id": case.get("id"),
@@ -419,6 +449,7 @@ def evaluate_agent_run(
             "safety_boundary": safety,
         },
         "failure_types": failure_types,
+        "missing_required_artifacts": missing_required_artifacts,
         "error_code": error_code,
         "error_message": error_message,
     }
@@ -426,10 +457,12 @@ def evaluate_agent_run(
     return data
 
 
-def _derive_failure_types(details: dict[str, dict[str, Any]], *, failure_type: str | None) -> list[str]:
+def _derive_failure_types(details: dict[str, dict[str, Any]], *, failure_type: str | None, category: str | None = None) -> list[str]:
     failures: set[str] = set()
     if failure_type:
         failures.add(failure_type)
+    if category == "domain_mismatch":
+        failures.add("domain_mismatch")
     if details["phase1"]["issues"]:
         failures.add("tool_sequence_error" if "invalid phase1 tool sequence" in details["phase1"]["issues"] else "format_error")
     if details["phase2"]["issues"]:
@@ -449,7 +482,10 @@ def _case_passed(
     report_score: float | None,
     failure_types: list[str],
     status: str,
+    missing_required_artifacts: list[str] | None = None,
 ) -> bool:
+    if missing_required_artifacts:
+        return False
     expected_status = expected.get("status")
     if expected_status == "completed" and status != "completed":
         return False
@@ -619,6 +655,7 @@ def build_benchmark_summary(manifest: dict[str, Any], results: list[CaseRunResul
     category_scores: dict[str, list[float]] = {}
     failure_taxonomy: dict[str, int] = {}
     category_pass: dict[str, list[bool]] = {}
+    critical_pass: list[bool] = []
     passed = 0
 
     case_by_id = {case["id"]: case for case in manifest.get("cases", [])}
@@ -631,6 +668,8 @@ def build_benchmark_summary(manifest: dict[str, Any], results: list[CaseRunResul
         weighted_score += score * weight
         if result.passed:
             passed += 1
+        if case.get("severity") == "critical":
+            critical_pass.append(result.passed)
         category_scores.setdefault(result.category, []).append(score)
         category_pass.setdefault(result.category, []).append(result.passed)
         for failure in result.agent_eval.get("failure_types", []):
@@ -659,11 +698,15 @@ def build_benchmark_summary(manifest: dict[str, Any], results: list[CaseRunResul
     success_rate = round(passed / len(results), 4) if results else 0.0
     happy_path = category_pass.get("happy_path", [])
     happy_path_success_rate = round(sum(1 for ok in happy_path if ok) / len(happy_path), 4) if happy_path else 0.0
+    critical_case_pass_rate = round(sum(1 for ok in critical_pass if ok) / len(critical_pass), 4) if critical_pass else 0.0
+    grounding_failure_rate = round(failure_taxonomy.get("grounding_error", 0) / len(results), 4) if results else 0.0
     gates = manifest.get("defaults", {}).get("release_gates", {})
     release = evaluate_release_gates(
         benchmark_score,
         success_rate,
         happy_path_success_rate,
+        critical_case_pass_rate,
+        grounding_failure_rate,
         failure_taxonomy,
         gates,
     )
@@ -673,6 +716,8 @@ def build_benchmark_summary(manifest: dict[str, Any], results: list[CaseRunResul
         "benchmark_score": benchmark_score,
         "success_rate": success_rate,
         "happy_path_success_rate": happy_path_success_rate,
+        "critical_case_pass_rate": critical_case_pass_rate,
+        "grounding_failure_rate": grounding_failure_rate,
         "total_cases": len(results),
         "passed_cases": passed,
         "category_scores": score_by_category,
@@ -686,18 +731,26 @@ def evaluate_release_gates(
     benchmark_score: float,
     success_rate: float,
     happy_path_success_rate: float,
+    critical_case_pass_rate: float,
+    grounding_failure_rate: float,
     failure_taxonomy: dict[str, int],
     gates: dict[str, Any],
 ) -> dict[str, Any]:
     failures: list[str] = []
     min_score = float(gates.get("min_benchmark_score", 0))
     min_success = float(gates.get("min_happy_path_success_rate", 0))
+    min_critical = float(gates.get("critical_case_pass_rate", 0))
+    max_grounding_rate = float(gates.get("max_grounding_failure_rate", 1))
     max_boundary = int(gates.get("max_boundary_error_count", 10**9))
 
     if benchmark_score < min_score:
         failures.append(f"benchmark_score {benchmark_score} < {min_score}")
     if happy_path_success_rate < min_success:
         failures.append(f"happy_path_success_rate {happy_path_success_rate} < {min_success}")
+    if critical_case_pass_rate < min_critical:
+        failures.append(f"critical_case_pass_rate {critical_case_pass_rate} < {min_critical}")
+    if grounding_failure_rate > max_grounding_rate:
+        failures.append(f"grounding_failure_rate {grounding_failure_rate} > {max_grounding_rate}")
     if failure_taxonomy.get("boundary_error", 0) > max_boundary:
         failures.append("boundary_error_count exceeds gate")
 
@@ -715,6 +768,8 @@ def render_benchmark_report(summary: dict[str, Any]) -> str:
         f"- Benchmark score: **{summary['benchmark_score']:.2f} / 100**",
         f"- Success rate: **{summary['success_rate']:.2%}**",
         f"- Happy path success rate: **{summary['happy_path_success_rate']:.2%}**",
+        f"- Critical case pass rate: **{summary['critical_case_pass_rate']:.2%}**",
+        f"- Grounding failure rate: **{summary['grounding_failure_rate']:.2%}**",
         f"- Cases: **{summary['passed_cases']} / {summary['total_cases']} passed**",
         f"- Release gate: **{'PASS' if summary['release']['passed'] else 'BLOCK'}**",
         "",
