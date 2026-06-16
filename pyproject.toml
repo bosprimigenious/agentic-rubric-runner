@@ -9,12 +9,6 @@ description = "A lightweight, auditable agent workflow for document-grounded PDF
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-
-[project.urls]
-Homepage = "https://bosprimigenious.github.io/agentic-rubric-runner/"
-Repository = "https://github.com/bosprimigenious/agentic-rubric-runner"
-"Deploy Console" = "https://agentic-rubric-runner.streamlit.app/"
-
 dependencies = [
     "openai>=1.30.0",
     "pymupdf>=1.24.0",
@@ -27,6 +21,11 @@ dependencies = [
     "weasyprint>=62.0",
 ]
 
+[project.urls]
+Homepage = "https://bosprimigenious.github.io/agentic-rubric-runner/"
+Repository = "https://github.com/bosprimigenious/agentic-rubric-runner"
+"Deploy Console" = "https://agentic-rubric-runner.streamlit.app/"
+
 [project.optional-dependencies]
 web = ["streamlit>=1.35.0"]
 dev = ["pytest>=7.0", "pytest-mock", "black", "ruff", "build>=1.2.0", "streamlit>=1.35.0"]
@@ -37,10 +36,6 @@ aarrr-agent = "aarrr_agent.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aarrr_agent"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"aarrr_agent/templates" = "aarrr_agent/templates"
-"aarrr_agent/assets" = "aarrr_agent/assets"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

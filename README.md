@@ -236,7 +236,30 @@ agentic-rubric validate outputs/<run_id>/grading_result.json
 agentic-rubric inspect-trace outputs/<run_id>/agent_trace.jsonl
 ```
 
-### 5. 启动 Web 控制台（可选，需 `[web]`）
+### 5. 生成 Agent 运行评分（可选）
+
+```bash
+agentic-rubric eval-run \
+  --out outputs/<run_id> \
+  --rubrics fixtures/rubrics.json
+```
+
+该命令读取一次已完成运行的产物，生成 `agent_eval.json`，从 Phase 1 执行、Phase 2 评分、任务成功率、事实可追溯、鲁棒性、效率与安全边界七个维度给出 run-level 分数。
+
+### 6. 运行 Benchmark（可选）
+
+```bash
+cp fixtures/benchmarks/agent_cases.example.json fixtures/benchmarks/agent_cases.json
+# 编辑 agent_cases.json，把 .example 占位文件替换为真实存在的 query/pdf/rubrics
+
+agentic-rubric bench \
+  --manifest fixtures/benchmarks/agent_cases.json \
+  --out outputs/bench
+```
+
+Benchmark 会逐个执行 manifest 中的 case，每个 case 写入独立目录，并在 `outputs/bench/` 下生成 `agent_benchmark_result.json` 和 `agent_benchmark_report.md`。
+
+### 7. 启动 Web 控制台（可选，需 `[web]`）
 
 ```bash
 pip install -e ".[web]"   # 若尚未安装 Web 依赖
@@ -255,6 +278,8 @@ streamlit run app.py
 | `phase1` | 仅生成报告（不读取 rubrics） |
 | `grade` | 仅 Phase 2 评分（需已有 Phase 1 产物） |
 | `validate` | 校验 `grading_result.json` 结构与分数一致性 |
+| `eval-run` | 对一次已完成运行生成 `agent_eval.json` |
+| `bench` | 按 manifest 运行 Agent Benchmark case suite |
 | `inspect-trace` | 格式化查看 `agent_trace.jsonl` |
 | `init` | 在当前目录生成任务模板（query / rubrics 骨架） |
 | `ui` | 启动 Streamlit 文档评审控制台（需 `[web]` extra） |
@@ -271,6 +296,12 @@ agentic-rubric grade --rubrics rubrics.json --phase1-md outputs/demo/phase1_outp
 
 # 切换模型
 agentic-rubric run ... --model deepseek-chat
+
+# 对单次运行做 Agent 级评分
+agentic-rubric eval-run --out outputs/demo --rubrics rubrics.json
+
+# 运行 benchmark case suite
+agentic-rubric bench --manifest fixtures/benchmarks/agent_cases.json --out outputs/bench
 ```
 
 `solution.py` 为兼容入口，等价于 `agentic-rubric run`。
@@ -290,76 +321,11 @@ agentic-rubric run ... --model deepseek-chat
 
 本地启动：`agentic-rubric ui` 或 `streamlit run app.py`
 
-### Streamlit Cloud 部署与排错
+### Streamlit Cloud 部署
 
-应用地址：[https://agentic-rubric-runner.streamlit.app/](https://agentic-rubric-runner.streamlit.app/)
+云端部署推荐配置：Main file 为 `app.py`，Requirements file 为 `requirements-streamlit.txt`，Python 版本为 3.11，Visibility 设为 Public。
 
-应用已创建后，若页面**空白 / 只有灰色背景 / 看不见内容**，按下面顺序排查（多数情况是云端配置未更新，而非代码未部署）：
-
-#### 第一步：核对 Streamlit Cloud 应用设置
-
-在 [share.streamlit.io](https://share.streamlit.io/) 打开你的应用 → 右下角 **Manage app** → **Settings**：
-
-你贴的是 **General** 标签。白屏还需要检查 **Sharing** 标签：
-
-| 设置项 | 正确值 |
-|--------|--------|
-| **Sharing → Who can view this app** | **This app is public and searchable** |
-
-**General 标签（你已打开）：**
-
-| 设置项 | 正确值 |
-|--------|--------|
-| Main file path | `app.py` |
-| Requirements file | `requirements-streamlit.txt` |
-| Python version | **3.11**（**不要选 3.14**，当前日志显示 3.14.6 可能导致白屏） |
-
-> **已部署但整页空白 / 控制台报 `Unable to preload CSS`：** 多半是应用仍为 **Private**（仅工作区成员可访问）。此时静态资源会 303 跳转到 `share.streamlit.io/-/auth/app`，浏览器加载不了 CSS/JS，页面只剩灰色壳子。  
-> **处理：** Settings → **Visibility → Public** → Save → **Clear cache and redeploy**。
-
-改完后点击 **Save**，再点 **Clear cache and redeploy**（或 **Reboot app**），等待 2–5 分钟，浏览器 **Ctrl+Shift+R** 硬刷新。
-
-#### 第二步：看构建日志
-
-**Manage app** → **Logs**，确认末尾有 `Processed dependencies!` 且无红色报错。常见错误：
-
-| 日志关键词 | 处理 |
-|------------|------|
-| `ModuleNotFoundError: aarrr_agent` | Requirements file 填错或 `main` 未拉到最新代码 → 改为 `requirements-streamlit.txt` 并 redeploy |
-| `No such file: requirements-streamlit.txt` | 拉取最新 `main`，或改用 `requirements-web.txt` |
-| `apt install` 失败 / `libgdk-pixbuf` | 勿在 `packages.txt` 添加易随 Debian 版本变化的 WeasyPrint 系统包；仅保留 `fonts-noto-cjk` |
-| `pip install` 失败 | 检查 Python 版本是否为 3.11 |
-
-#### 第三步：区分浏览器警告与真实故障
-
-控制台里 `Unrecognized feature: 'battery'` / `'vr'` 等是 Chrome 对 Streamlit iframe 的**无害警告**，可忽略。
-
-若出现 `Unable to preload CSS` 或整页只有灰色背景：在 Streamlit 控制台 **Reboot app**；仍不行则 **Delete app → 用同样配置重新 Create app**。
-
-#### 首次部署步骤（新建应用时）
-
-1. 登录 [share.streamlit.io](https://share.streamlit.io/)（GitHub 账号）
-2. **Create app** → Repository: `bosprimigenious/agentic-rubric-runner`，Branch: `main`，Main file: `app.py`
-3. Advanced → Requirements file: `requirements-streamlit.txt`；Secrets **留空**（用户在页面输入 API Key）
-4. **Deploy** → Visibility 设为 **Public**
-
-**云端构建依赖**
-
-| 文件 | 作用 |
-|------|------|
-| `requirements.txt` | CLI / 核心 Python 依赖 |
-| `requirements-web.txt` | 核心 + Streamlit（本地 Web） |
-| `requirements-streamlit.txt` | Streamlit Cloud 部署入口（推荐填此项） |
-| `packages.txt` | 系统包：仅 `fonts-noto-cjk`（PDF 在云端走 ReportLab 回退，不装 WeasyPrint 系统依赖） |
-| `app.py` | Streamlit 入口 |
-| `.streamlit/config.toml` | 主题配置 |
-
-**运行时错误码（应用内）**
-
-| 代码 | 含义 |
-|------|------|
-| E006 | 中文字体缺失 → 确认 `packages.txt` 含 `fonts-noto-cjk` |
-| E001 | 未输入 API Key 或 API 调用失败 |
+如果页面空白、只有灰色背景、控制台出现 `Unable to preload CSS`，通常是 Streamlit Cloud 权限或配置问题。完整部署步骤与排障手册见 [docs/streamlit_deploy.md](docs/streamlit_deploy.md)。
 
 ---
 
@@ -416,6 +382,15 @@ agentic-rubric run ... --model deepseek-chat
 | `grading_report.html` | 评审报告 HTML 版（可直接浏览器打开） |
 | `agent_trace.jsonl` | 每行一条 JSON，记录 LLM 与工具调用 |
 | `run_meta.json` | 运行元数据（耗时、输入哈希、模型、状态） |
+| `agent_eval.json` | `eval-run` 或 `bench` 生成的 Agent 级运行评分 |
+
+Benchmark 汇总目录额外包含：
+
+| 文件 | 说明 |
+|------|------|
+| `agent_benchmark_result.json` | 多 case 聚合结果：总分、通过率、分类分、失败 taxonomy、release gate |
+| `agent_benchmark_report.md` | 面向人工审阅的 Benchmark 报告 |
+| `<case_id>/<run_id>/` | 每个 case 的独立运行目录，包含该 case 的报告、评分、trace、meta 和 `agent_eval.json` |
 
 `grading_result.json` 主要字段：
 
@@ -435,6 +410,50 @@ agentic-rubric run ... --model deepseek-chat
 
 ---
 
+## 日志与审计
+
+本项目的排障核心是三个文件：
+
+| 文件 | 主要用途 | 关键字段 |
+|------|----------|----------|
+| `agent_trace.jsonl` | 回放 Agent 工具行为 | `step`、`tool`、`args_preview`、`status`、`duration_ms`、`phase1_state`、`error` |
+| `run_meta.json` | 复现一次运行 | `run_id`、`model`、`status`、`duration_seconds`、`input_hash`、`outputs` |
+| `agent_eval.json` | 判断一次运行是否达标 | `agent_score`、`report_score`、`dimensions`、`failure_types`、`details` |
+
+常见排障路径：
+
+1. `grading_result.json` 分数异常：先看 `grading_report.md` 的主要缺口，再看 `agent_eval.json` 的 `failure_types`。
+2. Agent 没生成报告：看 `agent_trace.jsonl` 最后一条工具调用和 `phase1_state`。
+3. 附件离题或事实不可追溯：看 `grading_result.json` 中是否出现“程序门控”，再看 `agent_eval.json` 的 `groundedness` 详情。
+4. Benchmark 阻断发布：看 `agent_benchmark_result.json` 的 `release.failures` 和 `failure_taxonomy`。
+5. 需要复现：用 `run_meta.json` 的输入哈希、模型名、输出文件名和 trace 定位对应 run。
+
+---
+
+## Agent Benchmark 规划
+
+当前 Benchmark 已具备最小闭环：
+
+- `bench` 命令读取 manifest 并逐 case 运行。
+- 每个 case 独立输出，避免互相覆盖。
+- 每次运行生成 `agent_eval.json`。
+- Benchmark 汇总生成 JSON 与 Markdown 报告。
+- 支持 release gate、case severity、owner、business impact 等生产字段。
+
+后续规划：
+
+| 阶段 | 目标 | 关键工作 |
+|------|------|----------|
+| Slice 1 | 稳定 run-level evaluator | 补齐更多确定性检查、完善 `agent_eval.json` schema |
+| Slice 2 | 扩充 case suite | 增加 happy path、离题附件、坏 PDF、噪声 PDF、rubric 变体、对抗 query |
+| Slice 3 | 证据校验升级 | 从证据 ID 检查升级为段落级 citation validator |
+| Slice 4 | 生产门禁 | 支持 baseline 对比、回归阈值、CI 阻断 |
+| Slice 5 | LLM judge 校准 | 引入 golden set、人审抽样、judge disagreement 统计 |
+
+详细标准见 [`docs/agent_scoring_upgrade.md`](docs/agent_scoring_upgrade.md)。
+
+---
+
 ## 评分公式
 
 三类约束按权重折算为 0–100 分，分母从 `rubrics.json` 动态计算：
@@ -451,6 +470,10 @@ final_score =
 - **可选约束**（optional）：加分项，权重 20%
 
 若某一类约束在 rubrics 中为空，对应项不参与计算（动态调整有效分母）。程序在写入前强制重算 `final_score`，与模型原始输出不一致时以程序结果为准。
+
+如需将当前“文档评分”升级为更完整的 Agent Benchmark，请参考
+[`docs/agent_scoring_upgrade.md`](docs/agent_scoring_upgrade.md) 与
+[`fixtures/benchmarks/agent_cases.example.json`](fixtures/benchmarks/agent_cases.example.json)。该标准覆盖 Phase 1 执行、Phase 2 评分、任务成功率、事实可追溯、鲁棒性、效率成本与安全边界。
 
 ---
 
@@ -473,6 +496,7 @@ final_score =
 agentic-rubric-runner/
 ├── aarrr_agent/              # 核心 Python 包
 │   ├── agent.py              # Phase 1 Agent 工具循环
+│   ├── benchmark.py          # Agent eval-run / bench 评测与汇总
 │   ├── grader.py             # Phase 2 Rubric 评分
 │   ├── grading_report.py     # 评审报告、总评清洗、管理层摘要
 │   ├── pipeline.py           # 双阶段编排与输出路径
@@ -491,6 +515,7 @@ agentic-rubric-runner/
 ├── app.py                    # Streamlit Cloud 入口
 ├── solution.py               # run 兼容入口
 ├── fixtures/                 # 样例 query / PDF / rubrics
+│   └── benchmarks/           # Agent Benchmark manifest 示例
 ├── docs/                     # GitHub Pages 静态站
 ├── tests/                    # pytest 测试套件
 ├── .github/workflows/        # CI、Pages、PyPI 发布

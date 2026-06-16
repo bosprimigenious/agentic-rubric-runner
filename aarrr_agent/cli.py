@@ -17,6 +17,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from aarrr_agent.benchmark import evaluate_agent_run, run_benchmark
 from aarrr_agent.config import PROJECT_ROOT
 from aarrr_agent.env import load_project_env
 from aarrr_agent.errors import PipelineError
@@ -257,6 +258,58 @@ def validate(
     except (json.JSONDecodeError, ValidationError, OSError) as exc:
         console.print(f"[red][E005] 校验失败: {exc}[/red]")
         raise typer.Exit(1) from exc
+
+
+@app.command("eval-run")
+def eval_run(
+    out: Path = typer.Option(..., "--out", help="已完成运行的输出目录"),
+    rubrics: Path | None = typer.Option(None, "--rubrics", help="可选：评分标准 rubrics.json"),
+) -> None:
+    """对一次已完成运行生成 agent_eval.json。"""
+    if not out.exists():
+        console.print(f"[red]输出目录不存在: {out}[/red]")
+        raise typer.Exit(1)
+    paths = resolve_output_paths(out, run_id=out.name)
+    result = evaluate_agent_run(paths, rubrics_path=rubrics, status="completed")
+    console.print(f"[green]✓[/green] Agent Eval → {out / 'agent_eval.json'}")
+    console.print(f"agent_score: [bold]{result['agent_score']:.2f}[/bold] / 100")
+    if result.get("report_score") is not None:
+        console.print(f"report_score: {result['report_score']:.2f} / 100")
+    if result.get("failure_types"):
+        console.print(f"failure_types: {', '.join(result['failure_types'])}")
+
+
+@app.command()
+def bench(
+    manifest: Path = typer.Option(..., "--manifest", help="Benchmark manifest JSON"),
+    out: Path = typer.Option(Path("outputs/bench"), "--out", help="Benchmark 输出目录"),
+    model: str = typer.Option("deepseek-chat", "--model", envvar="DEEPSEEK_MODEL"),
+    renderer: str = typer.Option("auto", "--renderer", envvar="PDF_RENDERER", help="PDF 渲染器: auto|html|reportlab"),
+) -> None:
+    """运行 Agent benchmark case suite，并生成汇总报告。"""
+    client = make_client()
+    console.rule("[bold blue]Agent Benchmark")
+    console.print(f"manifest: [cyan]{manifest}[/cyan]")
+    console.print(f"输出目录: [cyan]{out.resolve()}[/cyan]")
+    try:
+        with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
+            task = progress.add_task("Benchmark 运行中...", total=None)
+            summary = run_benchmark(
+                manifest_path=manifest,
+                out=out,
+                client=client,
+                model=model,
+                renderer=renderer,
+            )
+            progress.update(task, description="[green]Benchmark 完成")
+    except PipelineError as exc:
+        _handle_pipeline_error(exc)
+
+    console.print(f"[green]✓[/green] {out / 'agent_benchmark_result.json'}")
+    console.print(f"[green]✓[/green] {out / 'agent_benchmark_report.md'}")
+    console.print(f"benchmark_score: [bold]{summary['benchmark_score']:.2f}[/bold] / 100")
+    console.print(f"success_rate: {summary['success_rate']:.2%}")
+    console.print(f"release_gate: {'PASS' if summary['release']['passed'] else 'BLOCK'}")
 
 
 @app.command("inspect-trace")

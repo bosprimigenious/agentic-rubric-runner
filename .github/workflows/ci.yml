@@ -28,6 +28,8 @@ jobs:
           agentic-rubric phase1 --help
           agentic-rubric grade --help
           agentic-rubric validate --help
+          agentic-rubric eval-run --help
+          agentic-rubric bench --help
           agentic-rubric inspect-trace --help
           agentic-rubric init --help
 
@@ -59,6 +61,8 @@ jobs:
           agentic-rubric phase1 --help
           agentic-rubric grade --help
           agentic-rubric validate --help
+          agentic-rubric eval-run --help
+          agentic-rubric bench --help
           agentic-rubric inspect-trace --help
           agentic-rubric ui --help
 
