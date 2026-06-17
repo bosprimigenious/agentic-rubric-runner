@@ -80,6 +80,88 @@ def _report_content_from_tool(tool_name: str, tool_args: dict[str, Any]) -> str 
     return None
 
 
+def _tools_for_state(state: Phase1State) -> list[dict[str, Any]]:
+    if state == Phase1State.START:
+        allowed = {"read_text"}
+    elif state == Phase1State.NEED_PDF:
+        allowed = {"read_pdf"}
+    elif state == Phase1State.NEED_EVIDENCE:
+        allowed = {"extract_evidence_pack"}
+    elif state == Phase1State.NEED_REPORT:
+        allowed = {"write_structured_report"}
+    else:
+        allowed = set()
+    return [tool for tool in TOOLS if tool["function"]["name"] in allowed]
+
+
+def _tool_choice_for_state(state: Phase1State) -> dict[str, dict[str, str]] | str:
+    if state == Phase1State.START:
+        name = "read_text"
+    elif state == Phase1State.NEED_PDF:
+        name = "read_pdf"
+    elif state == Phase1State.NEED_EVIDENCE:
+        name = "extract_evidence_pack"
+    elif state == Phase1State.NEED_REPORT:
+        name = "write_structured_report"
+    else:
+        return "none"
+    return {"type": "function", "function": {"name": name}}
+
+
+def _state_instruction(ctx: Phase1ToolContext) -> str:
+    if ctx.state.state == Phase1State.START:
+        return f"当前必须调用 read_text，path 必须是：{ctx.query_path}"
+    if ctx.state.state == Phase1State.NEED_PDF:
+        return f"当前必须调用 read_pdf，path 必须是：{ctx.pdf_path}"
+    if ctx.state.state == Phase1State.NEED_EVIDENCE:
+        return f"当前必须调用 extract_evidence_pack，path 必须是：{ctx.pdf_path}"
+    if ctx.state.state == Phase1State.NEED_REPORT:
+        return (
+            "当前必须调用 write_structured_report，path 必须是："
+            f"{ctx.pdf_output_path}。report 字段必须符合系统提示中的结构化报告 JSON schema，"
+            "并在 evidence_refs 或正文中引用 evidence_pack 的 [E01] 等证据编号。"
+        )
+    return "Phase 1 已完成，不要再调用工具。"
+
+
+def _call_phase1_completion(
+    client: OpenAI,
+    *,
+    model: str,
+    messages: list[dict[str, Any]],
+    ctx: Phase1ToolContext,
+) -> Any:
+    tools = _tools_for_state(ctx.state.state)
+    tool_choice = _tool_choice_for_state(ctx.state.state)
+    try:
+        return call_chat_completion(
+            client,
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+    except PipelineError as exc:
+        if "tool_choice" not in exc.message:
+            raise
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "当前模型接口不接受强制 tool_choice；下面仅暴露当前允许工具。"
+                    f"{_state_instruction(ctx)}"
+                ),
+            }
+        )
+        return call_chat_completion(
+            client,
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+        )
+
+
 def _execute_tool_turn(
     msg: Any,
     messages: list[dict[str, Any]],
@@ -188,13 +270,13 @@ def run_phase1_agent(
 
     for turn in range(MAX_AGENT_TURNS):
         print(f"[Agent] Turn {turn + 1}/{MAX_AGENT_TURNS} [state={ctx.state.state.value}]...")
+        messages.append({"role": "user", "content": _state_instruction(ctx)})
         try:
-            response = call_chat_completion(
+            response = _call_phase1_completion(
                 client,
                 model=model,
                 messages=messages,
-                tools=TOOLS,
-                tool_choice="auto",
+                ctx=ctx,
             )
         except PipelineError:
             save_trace(trace, emergency_trace_path)
