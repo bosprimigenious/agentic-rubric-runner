@@ -1,11 +1,13 @@
 # agentic-rubric-runner
 
-[![PyPI](https://img.shields.io/pypi/v/agentic-rubric-runner.svg)](https://pypi.org/project/agentic-rubric-runner/)
+[![Version](https://img.shields.io/badge/version-0.5.1-blue.svg)](https://github.com/bosprimigenious/agentic-rubric-runner/releases/tag/v0.5.1)
 [![Python](https://img.shields.io/pypi/pyversions/agentic-rubric-runner.svg)](https://pypi.org/project/agentic-rubric-runner/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Deploy Console](https://img.shields.io/badge/Deploy%20Console-Streamlit-ff4b4b.svg)](https://agentic-rubric-runner.streamlit.app/)
 
-可审计的文档约束型 Agent 流水线。它把面试题要求的“两阶段任务”做成一个可安装、可复现、可追踪的 Python 工具：
+![agentic-rubric-runner architecture](docs/architecture.svg)
+
+可审计的文档约束型 Agent 流水线。它把“文档生成”和“Rubric 评分”拆成两个隔离阶段，提供可安装、可复现、可追踪的 Python 工具链：
 
 1. **Phase 1: Agent 做题**  
    只读取 `query.txt` 和 PDF 附件，通过 function calling 工具生成报告产物，不读取 `rubrics.json`。
@@ -293,7 +295,7 @@ agentic-rubric-runner/
 │   ├── benchmark.py              # eval-run / bench
 │   ├── web_app.py                # Streamlit UI
 │   └── ...
-├── fixtures/                     # 面试题样例材料
+├── fixtures/                     # 样例任务材料
 ├── docs/                         # GitHub Pages
 ├── tests/                        # pytest
 ├── app.py                        # Streamlit Cloud 入口
@@ -321,23 +323,6 @@ agentic-rubric-runner/
 | `E005` | Grading JSON 无效 |
 | `E006` | 中文字体缺失 |
 | `E007` | 附件与任务领域不匹配，触发 Phase 2 门控 |
-
-## Interview Notes
-
-这个项目可以直接对应面试题：
-
-| 面试要求 | 实现 |
-|----------|------|
-| Phase 1 只读 query + 附件 | 状态机和路径白名单限制 |
-| 必须通过 Agent 执行 | function calling Agent loop |
-| 不允许裸 LLM 直接返回 | 工具调用 trace 和 E003 校验 |
-| Phase 2 使用 rubrics 打分 | `grader.py` |
-| 输出 `grading_result.json` | `run` / `grade` 命令自动生成 |
-| 交付 `solution.py` | 保留兼容入口 |
-
-推荐面试介绍：
-
-> I implemented a two-phase, document-grounded Agent pipeline. Phase 1 is a state-machine controlled function-calling Agent that can only read the task file and PDF attachment, then writes a structured report. Phase 2 reads the generated report, rubrics, task and attachment, performs rubric-based evaluation, validates JSON output, and recomputes the final score programmatically.
 
 ## Security Notes
 
