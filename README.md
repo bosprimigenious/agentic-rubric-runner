@@ -1,5 +1,11 @@
 # agentic-rubric-runner
 
+> Part of the Loop Engineering Ecosystem.
+
+agentic-rubric-runner is the evaluation layer. It scores and audits generated documents, reports, and workflow artifacts.
+
+For long-running AI work loops and runtime orchestration, see [LoopPilot](https://github.com/bosprimigenious/LoopPilot).
+
 [![Version](https://img.shields.io/badge/version-0.5.1-blue.svg)](https://github.com/bosprimigenious/agentic-rubric-runner/releases/tag/v0.5.1)
 [![Python](https://img.shields.io/pypi/pyversions/agentic-rubric-runner.svg)](https://pypi.org/project/agentic-rubric-runner/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
