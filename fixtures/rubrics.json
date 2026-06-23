@@ -1,5 +1,17 @@
 {
   "rubric_summary": "本次rubric设计专注于评估模型是否依据《基于AARRR模型的社交电商平台用户增长策略研究.pdf》成功产出一份面向社交电商平台的中文PDF指标方案。硬约束重点覆盖输出格式、社交电商场景适配、北极星指标、关键健康指标与诊断指标层级、五阶段指标覆盖、目标值、预警规则、周/月/季度跟踪机制、可复盘看板以及关键事实可追溯性，确保最终产物完整满足任务核心要求。软约束用于区分质量高低，重点评估五阶段指标覆盖完整度、诊断指标细分深度、看板结构完整度、北极星指标选择理由、目标值依据和行动建议实施路径。可选约束用于识别额外优秀表现，包括总结部分、漏斗可视化和预警规则结构化呈现。",
+  "domain_gate": {
+    "target_domain": "social_commerce_growth",
+    "positive_signals": ["社交电商", "AARRR", "用户增长", "获客", "激活", "留存", "变现", "传播", "北极星", "GMV", "留存率", "病毒系数", "终身价值", "获客成本", "裂变", "分享推荐", "拼团"],
+    "negative_signals": ["樱桃", "栽培", "果树", "DNS", "dns", "中继", "中继服务器", "RCODE", "dig ", "FORMERR", "select()", "dnsrelay", "dnsperf", "计算机组成", "实验报告", "电路", "汇编", "农作物", "病虫害", "土壤", "G网", "路由表", "域名解析", "机器人", "智能机器人", "智能车", "实践训练", "训练指导书", "指导书", "嵌入式", "单片机", "STM32"],
+    "forced_analogy_patterns": ["DNS", "select\\s*\\(", "RCODE", "dnsrelay", "dnsperf", "上游中继", "本地解析", "主循环", "client_fd", "upstream"],
+    "min_positive_hits": 3,
+    "on_mismatch": {
+      "status": "gated",
+      "max_report_score": 10,
+      "failure_type": "domain_mismatch"
+    }
+  },
   "rubric": {
     "hard_constraints": [
       {

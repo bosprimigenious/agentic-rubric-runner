@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+import tomllib
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from openai import OpenAI
@@ -86,14 +88,39 @@ def write_run_meta(
     phase1_turns: int,
     final_score: float | None = None,
     status: str = "completed",
+    terminal_reason: str | None = None,
+    error_code: str | None = None,
+    error_message: str | None = None,
+    retry_count: int = 0,
+    boundary_error_count: int = 0,
+    token_usage: dict | None = None,
+    estimated_cost: dict | None = None,
 ) -> None:
     meta = {
+        "schema_version": "0.5.2",
         "run_id": paths.run_id,
+        "package_version": _package_version(),
         "model": model,
         "status": status,
+        "terminal_reason": terminal_reason or _default_terminal_reason(status),
+        "error_code": error_code,
+        "error_message": error_message,
         "duration_seconds": round(duration_seconds, 2),
         "phase1_turns": phase1_turns,
+        "tool_calls": phase1_turns,
+        "retry_count": retry_count,
+        "boundary_error_count": boundary_error_count,
         "final_score": final_score,
+        "token_usage": token_usage or {
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+        },
+        "estimated_cost": estimated_cost or {
+            "amount": None,
+            "currency": "USD",
+            "pricing_source": None,
+        },
         "input_hash": {
             "query": sha256_file(query),
             "pdf": sha256_file(pdf),
@@ -113,6 +140,32 @@ def write_run_meta(
         meta["outputs"]["grading_report_html"] = str(paths.grading_report_html.name)
 
     paths.run_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _package_version() -> str:
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+            project_version = data.get("project", {}).get("version")
+            if project_version:
+                return str(project_version)
+        except Exception:
+            pass
+    try:
+        return version("agentic-rubric-runner")
+    except PackageNotFoundError:
+        return "editable"
+
+
+def _default_terminal_reason(status: str) -> str:
+    if status == "completed":
+        return "completed"
+    if status == "phase1_only":
+        return "phase1_only"
+    if status == "failed":
+        return "pipeline_error"
+    return status
 
 
 def run_phase1_pipeline(

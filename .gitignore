@@ -24,5 +24,7 @@ fonts/*
 samples/
 *.pdf
 !fixtures/attachment.pdf
+!fixtures/off_domain_dns.pdf
+!fixtures/domain_variant_attachment.pdf
 .DS_Store
 Thumbs.db

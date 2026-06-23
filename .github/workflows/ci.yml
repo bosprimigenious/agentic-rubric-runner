@@ -30,6 +30,7 @@ jobs:
           agentic-rubric validate --help
           agentic-rubric eval-run --help
           agentic-rubric bench --help
+          agentic-rubric acceptance --help
           agentic-rubric inspect-trace --help
           agentic-rubric init --help
 
@@ -48,12 +49,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,web]"
 
-      - name: Ruff
-        run: ruff check aarrr_agent tests app.py || true
-
-      - name: Pytest
-        run: pytest -q
-
       - name: CLI help (with web extra)
         run: |
           agentic-rubric --help
@@ -63,11 +58,12 @@ jobs:
           agentic-rubric validate --help
           agentic-rubric eval-run --help
           agentic-rubric bench --help
+          agentic-rubric acceptance --help
           agentic-rubric inspect-trace --help
           agentic-rubric ui --help
 
-      - name: Build package
-        run: python -m build
+      - name: Acceptance gate (offline)
+        run: scripts/acceptance.sh offline
 
       - name: Upload dist
         uses: actions/upload-artifact@v4

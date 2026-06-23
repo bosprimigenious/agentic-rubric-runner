@@ -1,0 +1,80 @@
+{
+  "rubric_summary": "本 rubric 用于评估模型是否能够基于 DNS 中继服务器附件生成技术评审报告，而不是套用社交电商或 AARRR 指标体系。",
+  "domain_gate": {
+    "target_domain": "dns_relay_project",
+    "positive_signals": ["DNS", "中继服务器", "域名解析", "RCODE", "dig", "上游", "查询", "转发", "缓存", "本地规则"],
+    "negative_signals": ["社交电商", "AARRR", "获客", "激活", "留存", "变现", "传播", "北极星", "GMV"],
+    "forced_analogy_patterns": ["AARRR", "获客", "激活", "留存", "变现", "传播", "北极星", "GMV"],
+    "min_positive_hits": 3,
+    "on_mismatch": {
+      "status": "gated",
+      "max_report_score": 10,
+      "failure_type": "domain_mismatch"
+    }
+  },
+  "rubric": {
+    "hard_constraints": [
+      {
+        "description": "输出产物必须为 PDF 格式文件",
+        "score_0": "最终产物不是 PDF 格式文件。",
+        "score_1": "最终产物是 PDF 格式文件。",
+        "needs_reference": "否",
+        "reference_facts": "",
+        "fact_source": ""
+      },
+      {
+        "description": "报告必须围绕 DNS 中继服务器项目展开，不得套用社交电商或 AARRR 框架",
+        "score_0": "报告未围绕 DNS 中继服务器，或套用了无关业务框架。",
+        "score_1": "报告明确围绕 DNS 中继服务器项目。",
+        "needs_reference": "是",
+        "reference_facts": "附件包含 DNS 中继服务器、查询处理、上游转发或错误码相关内容。",
+        "fact_source": "附件正文"
+      },
+      {
+        "description": "必须说明 DNS 查询处理流程",
+        "score_0": "未说明查询处理流程。",
+        "score_1": "说明了查询接收、解析、处理或响应流程。",
+        "needs_reference": "是",
+        "reference_facts": "附件描述 DNS 查询处理步骤。",
+        "fact_source": "附件正文"
+      }
+    ],
+    "soft_constraints": [
+      {
+        "description": "测试建议的可复现程度",
+        "has_4_scale": "是",
+        "score_0": "没有测试建议。",
+        "score_1": "只有笼统测试建议。",
+        "score_2": "包含至少一条可执行命令或输入。",
+        "score_3": "覆盖正常和异常路径。",
+        "score_4": "覆盖正常、异常、边界和回归测试，且说明预期结果。",
+        "needs_reference": "否",
+        "reference_facts": "",
+        "fact_source": ""
+      },
+      {
+        "description": "风险与改进优先级的清晰度",
+        "has_4_scale": "是",
+        "score_0": "没有风险或改进建议。",
+        "score_1": "仅列出泛泛风险。",
+        "score_2": "包含具体风险但优先级不清晰。",
+        "score_3": "包含具体风险和优先级。",
+        "score_4": "包含风险、影响、优先级和验证方式。",
+        "needs_reference": "否",
+        "reference_facts": "",
+        "fact_source": ""
+      }
+    ],
+    "optional_constraints": [
+      {
+        "description": "是否包含发布前检查清单",
+        "has_4_scale": "否",
+        "score_0": "未包含发布前检查清单。",
+        "score_1": "包含发布前检查清单。",
+        "needs_reference": "否",
+        "reference_facts": "",
+        "fact_source": ""
+      }
+    ]
+  }
+}

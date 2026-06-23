@@ -243,6 +243,7 @@ Phase 2 输出：
 | `inspect-trace` | 查看 `agent_trace.jsonl` |
 | `eval-run` | 对一次已完成运行生成 `agent_eval.json` |
 | `bench` | 运行 Agent benchmark case suite |
+| `acceptance` | 对 benchmark manifest/result 执行 fail-closed 总门控 |
 | `init` | 初始化任务目录模板 |
 | `ui` | 启动 Streamlit Web 控制台 |
 
@@ -270,10 +271,16 @@ agentic-rubric eval-run \
 运行 benchmark suite：
 
 ```bash
-cp fixtures/benchmarks/agent_cases.example.json fixtures/benchmarks/agent_cases.json
 agentic-rubric bench \
   --manifest fixtures/benchmarks/agent_cases.json \
   --out outputs/bench
+```
+
+统一门控入口：
+
+```bash
+scripts/acceptance.sh offline
+scripts/acceptance.sh release
 ```
 
 Agent-level score 覆盖：
@@ -287,6 +294,10 @@ Robustness
 Efficiency
 Safety boundary
 ```
+
+开发方向与验收门控设计见
+[`docs/development/README.md`](docs/development/README.md)。从 `0.5.x`
+开始，`bench` 与 `acceptance` gate 才能决定 READY 状态；单次命令成功不等于发布可用。
 
 ## Repository Layout
 

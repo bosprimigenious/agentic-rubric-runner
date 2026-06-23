@@ -30,6 +30,23 @@ def test_dns_lab_not_relevant():
     assert not result["relevant"]
 
 
+def test_configured_domain_gate_can_target_dns_domain():
+    text = "DNS 中继服务器 RCODE dig 上游 查询 转发"
+    default_result = assess_attachment_domain(text)
+    dns_result = assess_attachment_domain(
+        text,
+        domain_gate={
+            "target_domain": "dns_relay_project",
+            "positive_signals": ["DNS", "中继服务器", "RCODE", "dig", "上游", "查询", "转发"],
+            "negative_signals": ["社交电商", "AARRR", "获客"],
+            "min_positive_hits": 3,
+        },
+    )
+    assert not default_result["relevant"]
+    assert dns_result["relevant"]
+    assert dns_result["target_domain"] == "dns_relay_project"
+
+
 def test_fixtures_attachment_relevant():
     from pathlib import Path
 

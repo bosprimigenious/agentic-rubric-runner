@@ -16,7 +16,7 @@ from aarrr_agent.benchmark import (
     evaluate_release_gates,
     run_benchmark,
 )
-from aarrr_agent.cli import app, bench, eval_run, main, phase1, run
+from aarrr_agent.cli import acceptance, app, bench, eval_run, main, phase1, run
 from aarrr_agent.pipeline import run_phase1_pipeline, run_phase2_pipeline
 
 
@@ -27,6 +27,7 @@ def test_cli_app_importable():
     assert callable(run)
     assert callable(eval_run)
     assert callable(bench)
+    assert callable(acceptance)
     assert callable(evaluate_agent_run)
     assert callable(run_benchmark)
 
@@ -55,6 +56,13 @@ def test_bench_help():
     result = runner.invoke(app, ["bench", "--help"])
     assert result.exit_code == 0
     assert _has_option(bench, "manifest", "--manifest")
+
+
+def test_acceptance_help():
+    runner = CliRunner()
+    result = runner.invoke(app, ["acceptance", "--help"])
+    assert result.exit_code == 0
+    assert _has_option(acceptance, "manifest", "--manifest")
 
 
 def _has_option(command, parameter_name: str, option_name: str) -> bool:
@@ -157,6 +165,19 @@ def test_benchmark_manifest_example_is_valid_json():
     data = json.loads(manifest.read_text(encoding="utf-8"))
     assert data["cases"]
     assert "release_gates" in data["defaults"]
+
+
+def test_benchmark_manifest_is_real_and_covers_required_categories():
+    manifest = Path("fixtures/benchmarks/agent_cases.json")
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    categories = {case["category"] for case in data["cases"]}
+    assert {
+        "happy_path",
+        "missing_input",
+        "domain_mismatch",
+        "adversarial_prompt",
+        "rubric_variant",
+    } <= categories
 
 
 def test_ui_exits_when_streamlit_missing():

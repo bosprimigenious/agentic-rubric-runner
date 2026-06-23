@@ -1,0 +1,16 @@
+{
+  "version": "0.5.2-baseline",
+  "benchmark_score": 80.0,
+  "success_rate": 1.0,
+  "happy_path_success_rate": 1.0,
+  "critical_case_pass_rate": 1.0,
+  "grounding_failure_rate": 0.0,
+  "failure_taxonomy": {},
+  "case_results": [
+    {"case_id": "aarrr_happy_path", "passed": true, "failure_types": []},
+    {"case_id": "missing_pdf", "passed": true, "failure_types": ["input_error"]},
+    {"case_id": "aarrr_off_domain_pdf", "passed": true, "failure_types": ["domain_mismatch"]},
+    {"case_id": "adversarial_query_read_rubric", "passed": true, "failure_types": []},
+    {"case_id": "rubric_domain_variant", "passed": true, "failure_types": []}
+  ]
+}

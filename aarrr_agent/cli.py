@@ -17,6 +17,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from aarrr_agent.acceptance import run_acceptance_gate
 from aarrr_agent.benchmark import evaluate_agent_run, run_benchmark
 from aarrr_agent.config import PROJECT_ROOT
 from aarrr_agent.env import load_project_env
@@ -119,7 +120,12 @@ def phase1(
     phase1_out: Path | None = typer.Option(None, "--phase1-out", help="覆盖 Phase 1 PDF 路径"),
     trace_out: Path | None = typer.Option(None, "--trace-out", help="覆盖 trace 路径"),
     model: str = typer.Option("deepseek-chat", "--model", envvar="DEEPSEEK_MODEL"),
-    renderer: str = typer.Option("auto", "--renderer", envvar="PDF_RENDERER", help="PDF 渲染器: auto|html|reportlab"),
+    renderer: str = typer.Option(
+        "auto",
+        "--renderer",
+        envvar="PDF_RENDERER",
+        help="PDF 渲染器: auto|html|reportlab",
+    ),
 ) -> None:
     """只运行 Phase 1：Agent 生成报告与 PDF（不读取 rubrics.json）。"""
     import os
@@ -159,7 +165,12 @@ def run(
     trace_out: Path | None = typer.Option(None, "--trace-out", help="覆盖 trace 路径"),
     model: str = typer.Option("deepseek-chat", "--model", envvar="DEEPSEEK_MODEL"),
     skip_phase2: bool = typer.Option(False, "--skip-phase2", help="仅运行 Phase 1"),
-    renderer: str = typer.Option("auto", "--renderer", envvar="PDF_RENDERER", help="PDF 渲染器: auto|html|reportlab"),
+    renderer: str = typer.Option(
+        "auto",
+        "--renderer",
+        envvar="PDF_RENDERER",
+        help="PDF 渲染器: auto|html|reportlab",
+    ),
 ) -> None:
     """完整双阶段流水线：Agent 生成报告 + Rubric 自动评分。"""
     import os
@@ -284,7 +295,12 @@ def bench(
     manifest: Path = typer.Option(..., "--manifest", help="Benchmark manifest JSON"),
     out: Path = typer.Option(Path("outputs/bench"), "--out", help="Benchmark 输出目录"),
     model: str = typer.Option("deepseek-chat", "--model", envvar="DEEPSEEK_MODEL"),
-    renderer: str = typer.Option("auto", "--renderer", envvar="PDF_RENDERER", help="PDF 渲染器: auto|html|reportlab"),
+    renderer: str = typer.Option(
+        "auto",
+        "--renderer",
+        envvar="PDF_RENDERER",
+        help="PDF 渲染器: auto|html|reportlab",
+    ),
 ) -> None:
     """运行 Agent benchmark case suite，并生成汇总报告。"""
     client = make_client()
@@ -310,6 +326,46 @@ def bench(
     console.print(f"benchmark_score: [bold]{summary['benchmark_score']:.2f}[/bold] / 100")
     console.print(f"success_rate: {summary['success_rate']:.2%}")
     console.print(f"release_gate: {'PASS' if summary['release']['passed'] else 'BLOCK'}")
+
+
+@app.command()
+def acceptance(
+    manifest: Path = typer.Option(
+        Path("fixtures/benchmarks/agent_cases.json"),
+        "--manifest",
+        help="Benchmark manifest JSON",
+    ),
+    benchmark_result: Path = typer.Option(
+        Path("outputs/bench/agent_benchmark_result.json"),
+        "--benchmark-result",
+        help="Benchmark result JSON",
+    ),
+    baseline: Path | None = typer.Option(None, "--baseline", help="Optional baseline benchmark JSON"),
+    out: Path = typer.Option(Path("outputs/acceptance_summary.json"), "--out", help="Acceptance summary JSON"),
+    mode: str = typer.Option("live", "--mode", help="offline|live|release"),
+) -> None:
+    """Fail-closed acceptance gate for local, CI, and release workflows."""
+    if mode not in {"offline", "live", "release"}:
+        console.print("[red]mode 必须是 offline、live 或 release[/red]")
+        raise typer.Exit(1)
+
+    summary = run_acceptance_gate(
+        manifest_path=manifest,
+        benchmark_result_path=benchmark_result,
+        baseline_path=baseline,
+        out_path=out,
+        mode=mode,  # type: ignore[arg-type]
+    )
+    status = summary["status"]
+    color = "green" if status in {"READY", "OFFLINE_OK"} else "red"
+    console.print(f"[{color}]{status}[/{color}] → {out}")
+    if summary["blockers"]:
+        for blocker in summary["blockers"]:
+            console.print(f"[red]- {blocker['id']}:[/red] {blocker['reason']}")
+        raise typer.Exit(1)
+    if summary["warnings"]:
+        for warning in summary["warnings"]:
+            console.print(f"[yellow]- {warning['id']}:[/yellow] {warning['reason']}")
 
 
 @app.command("inspect-trace")

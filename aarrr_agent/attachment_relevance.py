@@ -7,7 +7,83 @@ from typing import Any
 
 from aarrr_agent.schemas import GradingResult
 
-# 任务期望附件应包含的增长/AARRR 领域词（仅用于附件正文检测）
+DEFAULT_DOMAIN_GATE = {
+    "target_domain": "social_commerce_growth",
+    "positive_signals": (
+        "社交电商",
+        "AARRR",
+        "用户增长",
+        "获客",
+        "激活",
+        "留存",
+        "变现",
+        "传播",
+        "北极星",
+        "GMV",
+        "留存率",
+        "病毒系数",
+        "终身价值",
+        "获客成本",
+        "裂变",
+        "分享推荐",
+        "拼团",
+        "社交电商",
+    ),
+    "negative_signals": (
+        "樱桃",
+        "栽培",
+        "果树",
+        "DNS",
+        "dns",
+        "中继",
+        "中继服务器",
+        "RCODE",
+        "dig ",
+        "FORMERR",
+        "select()",
+        "dnsrelay",
+        "dnsperf",
+        "计算机组成",
+        "实验报告",
+        "电路",
+        "汇编",
+        "农作物",
+        "病虫害",
+        "土壤",
+        "G网",
+        "路由表",
+        "域名解析",
+        "机器人",
+        "智能机器人",
+        "智能车",
+        "实践训练",
+        "训练指导书",
+        "指导书",
+        "嵌入式",
+        "单片机",
+        "STM32",
+    ),
+    "min_positive_hits": 3,
+    "forced_analogy_patterns": (
+        r"DNS",
+        r"select\s*\(",
+        r"RCODE",
+        r"dnsrelay",
+        r"dnsperf",
+        r"上游中继",
+        r"本地解析",
+        r"主循环",
+        r"client_fd",
+        r"upstream",
+    ),
+    "on_mismatch": {
+        "status": "gated",
+        "max_report_score": 10,
+        "failure_type": "domain_mismatch",
+    },
+}
+
+# Backward-compatible aliases for existing tests and external imports.
 _DOMAIN_KEYWORDS = (
     "社交电商",
     "AARRR",
@@ -65,24 +141,60 @@ _OFF_DOMAIN_SIGNALS = (
     "STM32",
 )
 
-# 报告强行套用离题附件时的典型幻觉措辞
-_FORCED_ANALOGY = re.compile(
-    r"DNS|select\s*\(|RCODE|dnsrelay|dnsperf|上游中继|本地解析|主循环|client_fd|upstream",
-    re.I,
-)
+
+def get_domain_gate(rubrics: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return configured domain gate, falling back to the default AARRR profile."""
+    gate: dict[str, Any] = dict(DEFAULT_DOMAIN_GATE)
+    gate["positive_signals"] = tuple(DEFAULT_DOMAIN_GATE["positive_signals"])
+    gate["negative_signals"] = tuple(DEFAULT_DOMAIN_GATE["negative_signals"])
+    gate["forced_analogy_patterns"] = tuple(DEFAULT_DOMAIN_GATE["forced_analogy_patterns"])
+    gate["on_mismatch"] = dict(DEFAULT_DOMAIN_GATE["on_mismatch"])
+
+    if not rubrics:
+        return gate
+
+    configured = rubrics.get("domain_gate") or rubrics.get("rubric", {}).get("domain_gate")
+    if not isinstance(configured, dict):
+        return gate
+
+    for key in ("target_domain", "min_positive_hits", "max_negative_hits"):
+        if key in configured:
+            gate[key] = configured[key]
+    for key in ("positive_signals", "negative_signals", "forced_analogy_patterns"):
+        if isinstance(configured.get(key), (list, tuple)):
+            gate[key] = tuple(str(item) for item in configured[key])
+    if isinstance(configured.get("on_mismatch"), dict):
+        gate["on_mismatch"] = {**gate["on_mismatch"], **configured["on_mismatch"]}
+    return gate
 
 
-def assess_attachment_domain(attachment_text: str, query_text: str = "") -> dict[str, Any]:
+def _forced_analogy_re(domain_gate: dict[str, Any]) -> re.Pattern[str]:
+    patterns = domain_gate.get("forced_analogy_patterns") or DEFAULT_DOMAIN_GATE["forced_analogy_patterns"]
+    return re.compile("|".join(str(pattern) for pattern in patterns), re.I)
+
+
+def assess_attachment_domain(
+    attachment_text: str,
+    query_text: str = "",
+    domain_gate: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """
     检测附件是否属于任务要求的领域。
     注意：仅以附件正文为准，不把 query 关键词混入（避免 DNS 附件因 query 误判为相关）。
     """
+    gate = get_domain_gate({"domain_gate": domain_gate} if domain_gate else None)
     body = attachment_text[:120000]
-    domain_hits = [kw for kw in _DOMAIN_KEYWORDS if kw in body]
-    off_hits = [kw for kw in _OFF_DOMAIN_SIGNALS if kw in body]
+    domain_hits = [kw for kw in gate["positive_signals"] if kw in body]
+    off_hits = [kw for kw in gate["negative_signals"] if kw in body]
 
-    # 至少 3 个领域词，且显著多于离题信号
-    relevant = len(domain_hits) >= 3 and len(domain_hits) > len(off_hits)
+    min_positive_hits = int(gate.get("min_positive_hits", 3))
+    max_negative_hits = gate.get("max_negative_hits")
+    negative_ok = (
+        len(off_hits) <= int(max_negative_hits)
+        if max_negative_hits is not None
+        else len(domain_hits) > len(off_hits)
+    )
+    relevant = len(domain_hits) >= min_positive_hits and negative_ok
 
     # query 仅作辅助说明，不参与 relevant 判定
     _ = query_text
@@ -93,6 +205,7 @@ def assess_attachment_domain(attachment_text: str, query_text: str = "") -> dict
         "off_domain_hits": off_hits,
         "domain_hit_count": len(domain_hits),
         "off_domain_hit_count": len(off_hits),
+        "target_domain": gate.get("target_domain"),
     }
 
 
@@ -104,7 +217,8 @@ def format_e007_user_message(
     """生成面向用户的 E007 说明（强调这是预期拦截，而非系统故障）。"""
     off = ", ".join((assessment or {}).get("off_domain_hits", [])[:8])
     parts = [
-        "附件与 query 要求的「社交电商 / AARRR 用户增长策略」领域不一致，无法据此生成指标方案。",
+        "附件与 query 要求的「社交电商 / AARRR 用户增长策略」领域不一致，"
+        "无法据此生成指标方案。",
     ]
     if filename:
         parts.append(f"当前文件：{filename}")
@@ -123,12 +237,17 @@ def preflight_attachment_pdf(pdf_path: str) -> dict[str, Any]:
     return assess_attachment_domain(read_pdf(pdf_path))
 
 
-def detect_forced_analogy_report(report_text: str, attachment_text: str) -> bool:
+def detect_forced_analogy_report(
+    report_text: str,
+    attachment_text: str,
+    domain_gate: dict[str, Any] | None = None,
+) -> bool:
     """报告是否将离题附件（如 DNS 实验）强行类比为增长指标。"""
-    assessment = assess_attachment_domain(attachment_text)
+    gate = get_domain_gate({"domain_gate": domain_gate} if domain_gate else None)
+    assessment = assess_attachment_domain(attachment_text, domain_gate=gate)
     if assessment["relevant"]:
         return False
-    return bool(_FORCED_ANALOGY.search(report_text))
+    return bool(_forced_analogy_re(gate).search(report_text))
 
 
 def h15_failed(result: GradingResult) -> bool:
@@ -162,21 +281,24 @@ def enforce_attachment_gate(
     附件与任务领域不匹配时，程序强制压低分数。
     离题附件场景下仅保留 H01（PDF 格式）可能为 1，其余硬约束归零。
     """
-    assessment = assess_attachment_domain(attachment_text, query_text)
-    forced_analogy = detect_forced_analogy_report(report_text, attachment_text)
+    domain_gate = get_domain_gate(rubrics)
+    assessment = assess_attachment_domain(attachment_text, query_text, domain_gate=domain_gate)
+    forced_analogy = detect_forced_analogy_report(report_text, attachment_text, domain_gate=domain_gate)
     if not should_enforce_attachment_gate(result, assessment, forced_analogy=forced_analogy):
         return result, assessment
 
     rubric = rubrics["rubric"]
     if not assessment["relevant"] or forced_analogy:
         gate_reason = (
-            f"程序门控：附件与社交电商/AARRR 增长领域不匹配"
+            f"程序门控：附件与 {domain_gate.get('target_domain', 'configured domain')} 领域不匹配"
             f"（附件领域词 {assessment['domain_hit_count']} 个，"
             f"离题信号 {assessment['off_domain_hit_count']} 个："
             f"{', '.join(assessment['off_domain_hits'][:6]) or '无'}）。"
         )
         if forced_analogy:
-            gate_reason += " 报告将离题附件（如 DNS 实验）强行类比为增长指标，事实不可追溯。"
+            gate_reason += (
+                " 报告将离题附件（如 DNS 实验）强行类比为增长指标，事实不可追溯。"
+            )
     else:
         gate_reason = (
             "程序门控：H15 未通过（关键事实无法追溯到附件），"
